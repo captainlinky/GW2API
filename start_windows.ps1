@@ -10,10 +10,11 @@ Write-Host ""
 Write-Host "Checking Python installation..." -ForegroundColor Yellow
 try {
     $pythonVersion = python --version 2>&1
-    Write-Host "✓ Found: $pythonVersion" -ForegroundColor Green
-} catch {
-    Write-Host "✗ Python not found! Please install Python 3.8+ from python.org" -ForegroundColor Red
-    Write-Host "  Download: https://www.python.org/downloads/" -ForegroundColor Yellow
+    Write-Host "Found: $pythonVersion" -ForegroundColor Green
+}
+catch {
+    Write-Host "Python not found! Please install Python 3.8+ from python.org" -ForegroundColor Red
+    Write-Host "Download: https://www.python.org/downloads/" -ForegroundColor Yellow
     pause
     exit 1
 }
@@ -21,12 +22,12 @@ try {
 # Check if .env file exists
 if (-Not (Test-Path ".env")) {
     Write-Host ""
-    Write-Host "⚠ No .env file found!" -ForegroundColor Yellow
+    Write-Host "No .env file found!" -ForegroundColor Yellow
     Write-Host "Creating .env from template..." -ForegroundColor Yellow
     
     if (Test-Path ".env.example") {
         Copy-Item ".env.example" ".env"
-        Write-Host "✓ Created .env file" -ForegroundColor Green
+        Write-Host "Created .env file" -ForegroundColor Green
         Write-Host ""
         Write-Host "IMPORTANT: You need to add your GW2 API key!" -ForegroundColor Red
         Write-Host "1. Open .env file in notepad" -ForegroundColor Yellow
@@ -39,8 +40,9 @@ if (-Not (Test-Path ".env")) {
             notepad .env
             Write-Host "Waiting for you to save and close notepad..." -ForegroundColor Yellow
         }
-    } else {
-        Write-Host "✗ .env.example not found! Cannot create .env file" -ForegroundColor Red
+    }
+    else {
+        Write-Host ".env.example not found! Cannot create .env file" -ForegroundColor Red
         pause
         exit 1
     }
@@ -53,9 +55,10 @@ if (-Not (Test-Path ".venv")) {
     python -m venv .venv
     
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "✓ Virtual environment created" -ForegroundColor Green
-    } else {
-        Write-Host "✗ Failed to create virtual environment" -ForegroundColor Red
+        Write-Host "Virtual environment created" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Failed to create virtual environment" -ForegroundColor Red
         pause
         exit 1
     }
@@ -67,13 +70,13 @@ Write-Host "Activating virtual environment..." -ForegroundColor Yellow
 & ".venv\Scripts\Activate.ps1"
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "✗ Failed to activate virtual environment" -ForegroundColor Red
-    Write-Host "  You may need to run: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
+    Write-Host "Failed to activate virtual environment" -ForegroundColor Red
+    Write-Host "You may need to run: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
     pause
     exit 1
 }
 
-Write-Host "✓ Virtual environment activated" -ForegroundColor Green
+Write-Host "Virtual environment activated" -ForegroundColor Green
 
 # Install dependencies
 Write-Host ""
@@ -81,9 +84,10 @@ Write-Host "Installing dependencies..." -ForegroundColor Yellow
 pip install -r requirements.txt --quiet --disable-pip-version-check
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "✓ Dependencies installed" -ForegroundColor Green
-} else {
-    Write-Host "✗ Failed to install dependencies" -ForegroundColor Red
+    Write-Host "Dependencies installed" -ForegroundColor Green
+}
+else {
+    Write-Host "Failed to install dependencies" -ForegroundColor Red
     pause
     exit 1
 }
