@@ -6,10 +6,17 @@ Tracks guilds claiming objectives across the matchup week.
 
 import json
 import os
-import fcntl
+import sys
 from datetime import datetime, timedelta
 from typing import Dict, List, Set
 from pathlib import Path
+
+# Import fcntl only on Unix systems (not available on Windows)
+if sys.platform != 'win32':
+    import fcntl
+    HAS_FCNTL = True
+else:
+    HAS_FCNTL = False
 
 
 class WvWTracker:
@@ -28,7 +35,8 @@ class WvWTracker:
         """
         Load current match tracking data with file locking.
         
-        Uses shared lock (LOCK_SH) to allow concurrent reads.
+        Uses shared lock (LOCK_SH) to allow concurrent reads on Unix.
+        On Windows, file locking is not used (single-process safe only).
         Handles corrupted JSON files gracefully with error recovery.
         
         Returns:
@@ -37,13 +45,15 @@ class WvWTracker:
         if self.current_match_file.exists():
             try:
                 with open(self.current_match_file, 'r') as f:
-                    # Acquire shared lock for reading
-                    fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                    # Acquire shared lock for reading (Unix only)
+                    if HAS_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
                     try:
                         data = json.load(f)
                         return data
                     finally:
-                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                        if HAS_FCNTL:
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
             except (json.JSONDecodeError, IOError) as e:
                 print(f"[WVW_TRACKER] Error loading match data: {e}")
                 print(f"[WVW_TRACKER] Resetting corrupted match data file")
@@ -54,7 +64,8 @@ class WvWTracker:
         """
         Save match tracking data with file locking.
         
-        Uses exclusive lock (LOCK_EX) to prevent concurrent writes.
+        Uses exclusive lock (LOCK_EX) to prevent concurrent writes on Unix.
+        On Windows, file locking is not used (single-process safe only).
         Opens in r+ mode to avoid truncation before lock acquisition.
         Performs fsync for data integrity.
         
@@ -65,8 +76,9 @@ class WvWTracker:
             # Open in r+ mode (or create if doesn't exist) to avoid truncation before lock
             mode = 'r+' if self.current_match_file.exists() else 'w'
             with open(self.current_match_file, mode) as f:
-                # Acquire exclusive lock for writing
-                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                # Acquire exclusive lock for writing (Unix only)
+                if HAS_FCNTL:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 try:
                     f.seek(0)
                     f.truncate()
@@ -74,7 +86,8 @@ class WvWTracker:
                     f.flush()
                     os.fsync(f.fileno())
                 finally:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    if HAS_FCNTL:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except IOError as e:
             print(f"[WVW_TRACKER] Error saving match data: {e}")
     
