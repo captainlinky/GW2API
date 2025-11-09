@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GW2 API Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>⚔️ Guild Wars 2 API Tool</h1>
+            <div id="account-badge" class="account-badge"></div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+            <button class="nav-tab" data-tab="account">Account</button>
+            <button class="nav-tab" data-tab="characters">Characters</button>
+            <button class="nav-tab" data-tab="trading">Trading Post</button>
+            <button class="nav-tab" data-tab="query">Custom Query</button>
+            <button class="nav-tab" data-tab="settings">Settings</button>
+        </nav>
+
+        <!-- Tab Contents -->
+        <main class="content">
+            <!-- Dashboard Tab -->
+                        <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <h2>⚔️ WvW Command Center</h2>
+                
+                <!-- Live WvW Stats Cards -->
+                <div class="stats-cards">
+                    <div class="stat-card" onclick="loadAccountQuick()">
+                        <div class="stat-icon">👤</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Account</div>
+                            <div class="stat-value" id="stat-account-name">Loading...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card" id="stat-card-vp">
+                        <div class="stat-icon">🏆</div>
+                        <div class="stat-content">
+                            <div class="stat-label">Victory Points</div>
+                            <div class="stat-value" id="stat-victory-points">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card" id="stat-card-score">
+                        <div class="stat-icon">⚔️</div>
+                        <div class="stat-content">
+                            <div class="stat-label">War Score</div>
+                            <div class="stat-value" id="stat-war-score">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card" id="stat-card-kd">
+                        <div class="stat-icon">💀</div>
+                        <div class="stat-content">
+                            <div class="stat-label">K/D Ratio</div>
+                            <div class="stat-value" id="stat-kd-ratio">--</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- WvW Match Overview -->
+                <div class="wvw-match-overview">
+                    <h3>📊 Current Matchup</h3>
+                    <div id="match-overview-content">
+                        <p style="text-align: center; opacity: 0.6;">Click "Reload Match Data" to load matchup details</p>
+                    </div>
+                </div>
+                
+                <!-- Quick Action Panel -->
+                <div class="quick-actions-panel">
+                    <h3>🎯 Quick Actions</h3>
+                    <div class="action-grid">
+                        <button class="action-btn action-primary" onclick="reloadMatchData()">
+                            <span class="action-icon">🔄</span>
+                            <span class="action-text">
+                                <strong>Reload Match Data</strong>
+                                <small>Refresh your matchup stats and details</small>
+                            </span>
+                        </button>
+                        
+                        <button class="action-btn action-success" onclick="loadTrackedGuildsQuick()">
+                            <span class="action-icon">📊</span>
+                            <span class="action-text">
+                                <strong>Tracked Guilds</strong>
+                                <small>View accumulated guild data</small>
+                            </span>
+                        </button>
+                        
+                        <button class="action-btn action-info" onclick="loadAccountQuick()">
+                            <span class="action-icon">👤</span>
+                            <span class="action-text">
+                                <strong>Account Info</strong>
+                                <small>View your account details</small>
+                            </span>
+                        </button>
+                        
+                        <button class="action-btn action-warning" onclick="loadWalletQuick()">
+                            <span class="action-icon">💰</span>
+                            <span class="action-text">
+                                <strong>Wallet & Gold</strong>
+                                <small>Check your currencies</small>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Guild Tracking Overview -->
+                <div class="team-overview">
+                    <h3>� Tracked Guilds by Team</h3>
+                    <div class="team-bars">
+                        <div class="team-bar-item">
+                            <div class="team-bar-label" onclick="toggleTeamGuilds('red')" style="cursor: pointer;" title="Click to view guilds">
+                                <span>
+                                    <span id="red-team-label" style="color: #ff6b6b">🔴 Red Team</span>
+                                    <span id="red-dropdown-arrow" style="display: inline-block; transition: transform 0.2s; margin-left: 5px;">▼</span>
+                                </span>
+                                <span id="red-guild-count">0 guilds</span>
+                            </div>
+                            <div class="team-bar-bg">
+                                <div class="team-bar-fill team-red" id="red-bar" style="width: 0%"></div>
+                            </div>
+                            <div id="red-guilds-dropdown" class="team-guilds-dropdown" style="display: none;"></div>
+                        </div>
+                        
+                        <div class="team-bar-item">
+                            <div class="team-bar-label" onclick="toggleTeamGuilds('green')" style="cursor: pointer;" title="Click to view guilds">
+                                <span>
+                                    <span id="green-team-label" style="color: #6bff6b">🟢 Green Team</span>
+                                    <span id="green-dropdown-arrow" style="display: inline-block; transition: transform 0.2s; margin-left: 5px;">▼</span>
+                                </span>
+                                <span id="green-guild-count">0 guilds</span>
+                            </div>
+                            <div class="team-bar-bg">
+                                <div class="team-bar-fill team-green" id="green-bar" style="width: 0%"></div>
+                            </div>
+                            <div id="green-guilds-dropdown" class="team-guilds-dropdown" style="display: none;"></div>
+                        </div>
+                        
+                        <div class="team-bar-item">
+                            <div class="team-bar-label" onclick="toggleTeamGuilds('blue')" style="cursor: pointer;" title="Click to view guilds">
+                                <span>
+                                    <span id="blue-team-label" style="color: #6b6bff">🔵 Blue Team</span>
+                                    <span id="blue-dropdown-arrow" style="display: inline-block; transition: transform 0.2s; margin-left: 5px;">▼</span>
+                                </span>
+                                <span id="blue-guild-count">0 guilds</span>
+                            </div>
+                            <div class="team-bar-bg">
+                                <div class="team-bar-fill team-blue" id="blue-bar" style="width: 0%"></div>
+                            </div>
+                            <div id="blue-guilds-dropdown" class="team-guilds-dropdown" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- WvW Activity Timeline -->
+                <div class="activity-timeline-section">
+                    <h3>⚔️ Objective Capture Activity (Last 6 Hours)</h3>
+                    <div id="activity-chart-container" class="activity-chart-container" style="position: relative;">
+                        <canvas id="activity-chart"></canvas>
+                    </div>
+                    <div id="activity-legend" class="activity-legend">
+                        <span class="legend-item"><span class="legend-dot" style="background: #ff6b6b;"></span> <span id="legend-red-team">Red Team</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background: #6bff6b;"></span> <span id="legend-green-team">Green Team</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background: #6b6bff;"></span> <span id="legend-blue-team">Blue Team</span></span>
+                    </div>
+                </div>
+                
+                <!-- K/D Ratio Timeline -->
+                <div class="activity-timeline-section">
+                    <h3>💀 Kill/Death Ratio Trends (Last 6 Hours)</h3>
+                    <div id="kdr-chart-container" class="activity-chart-container" style="position: relative;">
+                        <canvas id="kdr-chart"></canvas>
+                    </div>
+                    <div id="kdr-legend" class="activity-legend">
+                        <span class="legend-item"><span class="legend-dot" style="background: #ff6b6b;"></span> <span id="kdr-legend-red-team">Red Team</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background: #6bff6b;"></span> <span id="kdr-legend-green-team">Green Team</span></span>
+                        <span class="legend-item"><span class="legend-dot" style="background: #6b6bff;"></span> <span id="kdr-legend-blue-team">Blue Team</span></span>
+                    </div>
+                </div>
+                
+                <div id="dashboard-result" class="result-container"></div>
+            </div>
+
+            <!-- Account Tab -->
+            <div id="account" class="tab-content">
+                <h2>Account Information</h2>
+                <div class="button-group">
+                    <button onclick="loadAccountDetails()" class="btn btn-primary">Load Account</button>
+                    <button onclick="loadWallet()" class="btn btn-primary">Load Wallet</button>
+                </div>
+                <div id="account-result" class="result-container"></div>
+            </div>
+
+            <!-- Characters Tab -->
+            <div id="characters" class="tab-content">
+                <h2>Characters</h2>
+                <div class="button-group">
+                    <button onclick="loadCharacterList()" class="btn btn-primary">Load Characters</button>
+                </div>
+                <div id="character-select"></div>
+                <div id="characters-result" class="result-container"></div>
+            </div>
+
+            <!-- WvW Tab -->
+            <div id="wvw" class="tab-content">
+                <h2>World vs World (WvW)</h2>
+                
+                <!-- Interactive Maps Section -->
+                <div class="wvw-maps-section">
+                    <div class="map-controls">
+                        <div id="map-selector" class="map-selector"></div>
+                        <button onclick="initWvWMaps()" class="btn btn-primary">
+                            🔄 Load Interactive Maps
+                        </button>
+                        <label style="margin-left: 10px; display: inline-flex; align-items: center; gap: 6px;">
+                            <input id="toggle-grid" type="checkbox" checked onchange="renderMap(window.currentMapType)"/>
+                            Show grid
+                        </label>
+                        <button onclick="stopAutoRefresh()" class="btn btn-small">⏸️ Pause</button>
+                        <button onclick="startAutoRefresh()" class="btn btn-small">▶️ Resume</button>
+                    </div>
+                    
+                    <div class="map-container">
+                        <div id="map-canvas" class="map-canvas">
+                            <p style="text-align: center; padding: 50px; opacity: 0.6;">
+                                Click "Load Interactive Maps" to view live WvW battlefield status
+                            </p>
+                        </div>
+                        <div id="objective-details" class="objective-details-panel">
+                            <p style="opacity: 0.6; text-align: center; padding: 20px;">
+                                Click an objective on the map to view details
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr style="margin: 30px 0; border-color: #444;">
+                
+                <h3>Match Data & Guild Tracking</h3>
+                <div class="wvw-controls">
+                    <div class="button-group">
+                        <button onclick="loadAllWvWMatches()" class="btn btn-primary">Load All Matches</button>
+                        <button onclick="loadMyWorldMatch()" class="btn btn-primary">My World's Match</button>
+                        <button onclick="loadTrackedGuilds()" class="btn btn-secondary">📊 View Tracked Guilds</button>
+                    </div>
+                    
+                    <div class="query-form" style="margin-top: 20px;">
+                        <label>Check Specific World:</label>
+                        <div class="input-group">
+                            <input type="number" id="wvw-world-id" placeholder="Enter World ID (e.g., 1020)" class="input-text">
+                            <button onclick="loadSpecificWorldMatch()" class="btn btn-secondary">Get Match</button>
+                        </div>
+                        <div class="preset-items">
+                            <p>Quick select:</p>
+                            <button onclick="setWorldId(1001)" class="btn btn-small">Anvil Rock</button>
+                            <button onclick="setWorldId(1002)" class="btn btn-small">Borlis Pass</button>
+                            <button onclick="setWorldId(1003)" class="btn btn-small">Yak's Bend</button>
+                            <button onclick="setWorldId(1004)" class="btn btn-small">Henge of Denravi</button>
+                            <button onclick="setWorldId(1005)" class="btn btn-small">Maguuma</button>
+                            <button onclick="setWorldId(1006)" class="btn btn-small">Sorrow's Furnace</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="wvw-result" class="result-container"></div>
+            </div>
+
+            <!-- Trading Post Tab -->
+            <div id="trading" class="tab-content">
+                <h2>Trading Post</h2>
+                <div class="query-form">
+                    <label>Item IDs (comma-separated):</label>
+                    <div class="input-group">
+                        <input type="text" id="item-ids" placeholder="e.g., 19721, 24277, 19976" class="input-text">
+                        <button onclick="loadTradingPost()" class="btn btn-primary">Get Prices</button>
+                    </div>
+                    <div class="preset-items">
+                        <p>Common items:</p>
+                        <button onclick="setItemIds('19721')" class="btn btn-small">Ecto</button>
+                        <button onclick="setItemIds('24277')" class="btn btn-small">Mystic Coin</button>
+                        <button onclick="setItemIds('19976')" class="btn btn-small">T6 Blood</button>
+                        <button onclick="setItemIds('19721,24277,19976')" class="btn btn-small">All Three</button>
+                    </div>
+                </div>
+                <div id="trading-result" class="result-container"></div>
+            </div>
+
+            <!-- Custom Query Tab -->
+            <div id="query" class="tab-content">
+                <h2>Custom API Query</h2>
+                <div class="query-form">
+                    <label>Endpoint:</label>
+                    <input type="text" id="custom-endpoint" placeholder="e.g., achievements/daily" class="input-text">
+                    
+                    <label>Parameters (JSON, optional):</label>
+                    <textarea id="custom-params" placeholder='{"ids": "all"}' class="input-textarea"></textarea>
+                    
+                    <button onclick="executeCustomQuery()" class="btn btn-primary">Execute Query</button>
+                    
+                    <div class="preset-queries">
+                        <p>Quick queries:</p>
+                        <button onclick="setQuery('build', '{}')" class="btn btn-small">Game Build</button>
+                        <button onclick="setQuery('achievements/daily', '{}')" class="btn btn-small">Daily Achievements</button>
+                        <button onclick="setQuery('dailycrafting', '{}')" class="btn btn-small">Daily Crafting</button>
+                        <button onclick="setQuery('worlds', '{\"ids\": \"all\"}')" class="btn btn-small">All Worlds</button>
+                    </div>
+                </div>
+                <div id="query-result" class="result-container"></div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings" class="tab-content">
+                <h2>Settings</h2>
+                
+                <div class="settings-section">
+                    <h3>API Key Configuration</h3>
+                    <div id="current-key-status"></div>
+                    
+                    <div class="query-form">
+                        <label>API Key:</label>
+                        <input type="password" id="new-api-key" placeholder="Enter your GW2 API key" class="input-text">
+                        <div class="button-group">
+                            <button onclick="saveApiKey()" class="btn btn-primary">Save API Key</button>
+                            <button onclick="toggleKeyVisibility()" class="btn btn-secondary">Show/Hide</button>
+                            <button onclick="deleteApiKey()" class="btn btn-danger">Delete API Key</button>
+                        </div>
+                        
+                        <div class="info-box">
+                            <p><strong>Get your API key:</strong></p>
+                            <ol>
+                                <li>Visit <a href="https://account.arena.net/applications" target="_blank">https://account.arena.net/applications</a></li>
+                                <li>Create a new key or use an existing one</li>
+                                <li>Enable the permissions you want (account, wallet, characters, etc.)</li>
+                                <li>Paste the key above and click Save</li>
+                            </ol>
+                            <p><strong>Note:</strong> To see guild information in WvW, your API key needs the "guilds" permission.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>About</h3>
+                    <p>Guild Wars 2 API Tool - Web Interface</p>
+                    <p>Version 1.0</p>
+                    <p>A simple interface to interact with the GW2 API without coding.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script src="/static/wvw-maps.js"></script>
+</body>
+</html>
