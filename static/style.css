@@ -23,6 +23,7 @@
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    background-attachment: fixed;
     color: var(--text-color);
     min-height: 100vh;
     padding: 20px;
@@ -35,14 +36,28 @@ body {
 
 /* Header */
 .header {
-    background: var(--card-bg);
+    background: linear-gradient(135deg, var(--card-bg) 0%, rgba(42, 42, 42, 0.95) 100%);
     padding: 20px 30px;
     border-radius: 10px;
     margin-bottom: 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(212, 175, 55, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #ff6b6b 0%, #d4af37 50%, #6b6bff 100%);
+    opacity: 0.6;
 }
 
 .header h1 {
@@ -124,12 +139,30 @@ body {
     gap: 15px;
     transition: all 0.3s ease;
     cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
 .stat-card:hover {
     border-color: var(--primary-color);
     transform: translateY(-5px);
-    box-shadow: 0 8px 16px rgba(212, 175, 55, 0.2);
+    box-shadow: 0 8px 16px rgba(212, 175, 55, 0.3), 0 0 20px rgba(212, 175, 55, 0.1);
+}
+
+.stat-card:hover::after {
+    opacity: 1;
 }
 
 .stat-icon {
@@ -391,12 +424,13 @@ body {
 
 /* Activity Timeline Section */
 .activity-timeline-section {
-    background: var(--dark-bg);
+    background: linear-gradient(135deg, var(--dark-bg) 0%, rgba(26, 26, 26, 0.95) 100%);
     border-radius: 12px;
     padding: 25px;
     margin-bottom: 30px;
     border: 2px solid var(--border-color);
     position: relative;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(212, 175, 55, 0.1);
 }
 
 .activity-timeline-section h3 {
@@ -763,6 +797,142 @@ body {
 .btn-small {
     padding: 8px 15px;
     font-size: 0.9em;
+}
+
+/* Time Window Selector */
+.time-window-selector {
+    display: flex;
+    gap: 5px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 3px;
+    border-radius: 6px;
+}
+
+.time-window-btn {
+    padding: 6px 14px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.2s ease;
+}
+
+.time-window-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+}
+
+.time-window-btn.active {
+    background: var(--primary-color);
+    color: var(--dark-bg);
+    border-color: var(--primary-color);
+    font-weight: 600;
+}
+
+/* Enhanced WvW Stats */
+.stat-panel {
+    background: linear-gradient(135deg, var(--card-bg) 0%, rgba(42, 42, 42, 0.95) 100%);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4), 0 0 20px rgba(212, 175, 55, 0.05);
+    border: 2px solid var(--border-color);
+    position: relative;
+}
+
+.stat-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+    opacity: 0.6;
+    border-radius: 8px 8px 0 0;
+}
+
+.stat-panel h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: var(--primary-color);
+    font-size: 1.1em;
+}
+
+.ppt-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ppt-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.ppt-label {
+    font-size: 0.95em;
+    opacity: 0.9;
+}
+
+.ppt-value {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.territory-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.territory-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.territory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.territory-team {
+    font-weight: 600;
+    font-size: 1em;
+}
+
+.territory-percent {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.territory-bar {
+    height: 20px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #444;
+}
+
+.territory-fill {
+    height: 100%;
+    transition: width 0.5s ease;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.territory-details {
+    font-size: 0.85em;
+    opacity: 0.7;
+    text-align: right;
 }
 
 /* Forms */

@@ -8,6 +8,8 @@ import os
 import json
 import threading
 import time
+import logging
+from pathlib import Path
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
@@ -18,12 +20,73 @@ from dotenv import load_dotenv, set_key, find_dotenv
 # Load environment variables
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger('GW2-WebUI')
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 CORS(app)
 
 # Initialize WvW tracker
 wvw_tracker = WvWTracker()
+
+# Load alliance names for display
+def load_alliance_names():
+    """Load alliance name mappings from JSON file."""
+    try:
+        alliance_file = Path('alliance_names.json')
+        if alliance_file.exists():
+            with open(alliance_file, 'r') as f:
+                data = json.load(f)
+                return (
+                    data.get('overrides', {}),
+                    data.get('team_names', {}),
+                    data.get('alliances', {})
+                )
+    except Exception as e:
+        logger.error(f"Error loading alliance names: {e}")
+    return {}, {}, {}
+
+ALLIANCE_OVERRIDES, TEAM_NAMES, ALLIANCE_NAMES = load_alliance_names()
+
+def get_alliance_display_name(world_id, world_name):
+    """
+    Get the display name for a world, preferring WvW team instance names.
+
+    Priority order:
+    1. Manual overrides (for custom naming)
+    2. Team names (11xxx/12xxx - WvW battlefield instances like "Tombs of Drascir")
+    3. Alliance names (1xxx - home servers)
+    4. Fallback to API world name
+
+    Args:
+        world_id: World ID number (can be team ID 11xxx/12xxx or world ID 1xxx)
+        world_name: Default world name from API
+
+    Returns:
+        Display name for the world/team
+    """
+    world_id_str = str(world_id)
+
+    # Check overrides first (manual customization)
+    if world_id_str in ALLIANCE_OVERRIDES:
+        return ALLIANCE_OVERRIDES[world_id_str]
+
+    # Check team names (WvW battlefield instances - these are the proper WvW team names)
+    if world_id_str in TEAM_NAMES:
+        return TEAM_NAMES[world_id_str]
+
+    # Check alliance names (home server names)
+    if world_id_str in ALLIANCE_NAMES:
+        return ALLIANCE_NAMES[world_id_str]
+
+    # Fall back to world name from API
+    return world_name
 
 # K/D History tracking
 KDR_HISTORY_FILE = 'kdr_history.json'
@@ -40,7 +103,7 @@ def load_kdr_history():
             with open(KDR_HISTORY_FILE, 'r') as f:
                 return json.load(f)
     except Exception as e:
-        print(f"Error loading K/D history: {e}")
+        logger.error(f"Error loading K/D history: {e}")
     return {}
 
 def save_kdr_history(history):
@@ -49,7 +112,7 @@ def save_kdr_history(history):
         with open(KDR_HISTORY_FILE, 'w') as f:
             json.dump(history, f, indent=2)
     except Exception as e:
-        print(f"Error saving K/D history: {e}")
+        logger.error(f"Error saving K/D history: {e}")
 
 def load_activity_history():
     """Load activity history from file."""
@@ -58,7 +121,7 @@ def load_activity_history():
             with open(ACTIVITY_HISTORY_FILE, 'r') as f:
                 return json.load(f)
     except Exception as e:
-        print(f"Error loading activity history: {e}")
+        logger.error(f"Error loading activity history: {e}")
     return {}
 
 def save_activity_history(history):
@@ -67,7 +130,7 @@ def save_activity_history(history):
         with open(ACTIVITY_HISTORY_FILE, 'w') as f:
             json.dump(history, f, indent=2)
     except Exception as e:
-        print(f"Error saving activity history: {e}")
+        logger.error(f"Error saving activity history: {e}")
 
 def record_activity_snapshot(match_id, world_id):
     """
@@ -134,22 +197,39 @@ def record_activity_snapshot(match_id, world_id):
             history[match_id] = [s for s in history[match_id] if s['timestamp'] > cutoff]
             
             save_activity_history(history)
-            print(f"[ACTIVITY] Recorded snapshot for match {match_id}: R={team_objectives['red']} G={team_objectives['green']} B={team_objectives['blue']} objectives")
-    
+            logger.info(f"Recorded activity snapshot for match {match_id}: R={team_objectives['red']} G={team_objectives['green']} B={team_objectives['blue']} objectives")
+
     except Exception as e:
-        print(f"[ACTIVITY] Error recording snapshot: {e}")
+        logger.error(f"Error recording activity snapshot: {e}")
+
+def normalize_team_data(data_dict):
+    """
+    Normalize team data to handle both lowercase and capitalized keys from API.
+
+    Args:
+        data_dict: Dictionary with team keys (may be 'red'/'Red', etc.)
+
+    Returns:
+        Dictionary with normalized lowercase keys
+    """
+    return {
+        'red': data_dict.get('red', data_dict.get('Red', 0)),
+        'green': data_dict.get('green', data_dict.get('Green', 0)),
+        'blue': data_dict.get('blue', data_dict.get('Blue', 0))
+    }
+
 
 def record_kdr_snapshot(match_id, world_id):
     """
     Record a K/D ratio snapshot for the current match.
-    
+
     Captures kill and death counts for all three teams and calculates ratios.
     Stores historical data with 7-day retention for trend analysis.
-    
+
     Args:
         match_id: WvW match identifier (e.g., '1-2')
         world_id: World/server ID to track
-        
+
     Stores:
         - Timestamp
         - Kills per team
@@ -159,34 +239,23 @@ def record_kdr_snapshot(match_id, world_id):
     try:
         client = GW2API()
         match = client.get_wvw_match_by_world(int(world_id))
-        
+
         if not match:
             return
-        
-        # Get kills and deaths
-        kills = match.get('kills', {})
-        deaths = match.get('deaths', {})
-        
-        # Extract team data (handle both lowercase and capitalized keys)
-        team_kills = {
-            'red': kills.get('red', kills.get('Red', 0)),
-            'green': kills.get('green', kills.get('Green', 0)),
-            'blue': kills.get('blue', kills.get('Blue', 0))
-        }
-        
-        team_deaths = {
-            'red': max(deaths.get('red', deaths.get('Red', 1)), 1),
-            'green': max(deaths.get('green', deaths.get('Green', 1)), 1),
-            'blue': max(deaths.get('blue', deaths.get('Blue', 1)), 1)
-        }
-        
+
+        # Get kills and deaths (normalized to handle API inconsistencies)
+        team_kills = normalize_team_data(match.get('kills', {}))
+        team_deaths = normalize_team_data(match.get('deaths', {}))
+
+        # Ensure deaths are at least 1 to avoid division by zero
+        team_deaths = {k: max(v, 1) for k, v in team_deaths.items()}
+
         # Calculate K/D ratios
         team_kdr = {
-            'red': round(team_kills['red'] / team_deaths['red'], 2),
-            'green': round(team_kills['green'] / team_deaths['green'], 2),
-            'blue': round(team_kills['blue'] / team_deaths['blue'], 2)
+            color: round(team_kills[color] / team_deaths[color], 2)
+            for color in ['red', 'green', 'blue']
         }
-        
+
         snapshot = {
             'timestamp': datetime.utcnow().isoformat() + 'Z',
             'red_kdr': team_kdr['red'],
@@ -199,33 +268,190 @@ def record_kdr_snapshot(match_id, world_id):
             'green_deaths': team_deaths['green'],
             'blue_deaths': team_deaths['blue']
         }
-        
+
         with kdr_history_lock:
             history = load_kdr_history()
-            
+
             if match_id not in history:
                 history[match_id] = []
-            
+
             # Add new snapshot
             history[match_id].append(snapshot)
-            
+
             # Keep only last 7 days of data (full WvW matchup duration)
             cutoff = (datetime.utcnow() - timedelta(days=7)).isoformat() + 'Z'
             history[match_id] = [s for s in history[match_id] if s['timestamp'] > cutoff]
-            
+
             save_kdr_history(history)
-            print(f"[KDR] Recorded snapshot for match {match_id}: R={team_kdr['red']} G={team_kdr['green']} B={team_kdr['blue']}")
-    
+            logger.info(f"Recorded K/D snapshot for match {match_id}: R={team_kdr['red']} G={team_kdr['green']} B={team_kdr['blue']}")
+
     except Exception as e:
-        print(f"[KDR] Error recording snapshot: {e}")
+        logger.error(f"Error recording K/D snapshot: {e}")
+
+def extract_team_id_from_worlds(world_ids):
+    """
+    Extract team ID from all_worlds array.
+    Team IDs are 11xxx (NA) or 12xxx (EU).
+
+    Args:
+        world_ids: List of world/team IDs
+
+    Returns:
+        Team ID (11xxx/12xxx) if found, otherwise None
+    """
+    for wid in world_ids:
+        if 11000 <= wid <= 12999:  # Team ID range
+            return wid
+    return None
+
+def get_player_team_info(client, match, player_world_id):
+    """
+    Get the player's team ID and color from the account/wvw endpoint.
+
+    Args:
+        client: GW2API client instance
+        match: Match data
+        player_world_id: Player's world ID
+
+    Returns:
+        Tuple of (team_id, color) or (None, None) if not found
+    """
+    try:
+        account_wvw = client.get_account_wvw()
+        team_id = account_wvw.get('team')
+
+        # Find which color the player is on
+        for color in ['red', 'green', 'blue']:
+            if color in match.get('all_worlds', {}):
+                world_ids = match['all_worlds'][color]
+                if player_world_id in world_ids:
+                    return team_id, color
+
+        return None, None
+    except Exception as e:
+        logger.warning(f"Could not fetch player team info: {e}")
+        return None, None
+
+def get_all_team_ids(match):
+    """
+    Extract team IDs for all three colors from match data.
+
+    Args:
+        match: Match data
+
+    Returns:
+        Dict mapping color to team_id {'red': 11001, 'green': 11004, 'blue': 11005}
+    """
+    team_ids = {}
+    for color in ['red', 'green', 'blue']:
+        if color in match.get('all_worlds', {}):
+            world_ids = match['all_worlds'][color]
+            team_id = extract_team_id_from_worlds(world_ids)
+            if team_id:
+                team_ids[color] = team_id
+    return team_ids
+
+def build_enriched_match(match, world_map, guild_map, player_team_id=None, player_color=None):
+    """
+    Build enriched match data with world names and guild information.
+
+    Args:
+        match: Raw match data from API
+        world_map: Dictionary mapping world IDs to names
+        guild_map: Dictionary mapping guild IDs to guild info
+        player_team_id: Optional team ID for the player's team (11xxx/12xxx) - DEPRECATED, use team IDs from all_worlds
+        player_color: Optional color ('red', 'green', 'blue') for the player's team - DEPRECATED
+
+    Returns:
+        Enriched match data dictionary
+    """
+    enriched = {
+        'id': match['id'],
+        'start_time': match.get('start_time'),
+        'end_time': match.get('end_time'),
+        'worlds': {},
+        'scores': match.get('scores', {}),
+        'deaths': match.get('deaths', {}),
+        'kills': match.get('kills', {}),
+        'victory_points': match.get('victory_points', {}),
+        'maps': []
+    }
+
+    # Get team IDs for all teams from all_worlds arrays
+    all_team_ids = get_all_team_ids(match)
+
+    # Process teams
+    for color in ['red', 'blue', 'green']:
+        if color in match.get('all_worlds', {}):
+            world_ids = match['all_worlds'][color]
+            main_world = match['worlds'][color]
+
+            world_name = world_map.get(main_world, f'World {main_world}')
+
+            # Use team ID if available (from all_worlds array), otherwise use main_world
+            team_id = all_team_ids.get(color)
+            if team_id:
+                display_name = get_alliance_display_name(team_id, world_name)
+            else:
+                display_name = get_alliance_display_name(main_world, world_name)
+
+            enriched['worlds'][color] = {
+                'main_world_id': main_world,
+                'main_world_name': world_name,
+                'display_name': display_name,
+                'display_world_id': main_world,
+                'linked_worlds': [
+                    {
+                        'id': wid,
+                        'name': world_map.get(wid, f'World {wid}')
+                    }
+                    for wid in world_ids if wid != main_world
+                ],
+                'all_world_ids': world_ids
+            }
+
+    # Process maps with guild information
+    for map_data in match.get('maps', []):
+        map_info = {
+            'id': map_data['id'],
+            'type': map_data['type'],
+            'scores': map_data.get('scores', {}),
+            'bonuses': map_data.get('bonuses', []),
+            'objectives': []
+        }
+
+        for obj in map_data.get('objectives', []):
+            obj_info = {
+                'id': obj['id'],
+                'type': obj.get('type', 'Unknown'),
+                'owner': obj.get('owner', 'Neutral'),
+                'claimed_by': obj.get('claimed_by'),
+                'claimed_at': obj.get('claimed_at'),
+                'points_tick': obj.get('points_tick', 0),
+                'points_capture': obj.get('points_capture', 0),
+                'yaks_delivered': obj.get('yaks_delivered', 0)
+            }
+
+            # Add guild information if available
+            if obj.get('claimed_by') and obj['claimed_by'] in guild_map:
+                guild = guild_map[obj['claimed_by']]
+                obj_info['guild_name'] = guild.get('name', 'Unknown Guild')
+                obj_info['guild_tag'] = guild.get('tag', '')
+
+            map_info['objectives'].append(obj_info)
+
+        enriched['maps'].append(map_info)
+
+    return enriched
+
 
 def update_guild_tracking(match, world_id):
     """
     Update guild tracking with current match data.
-    
+
     Extracts guild claims from objectives and persists them.
     Uses WvWTracker for file-safe storage with locking.
-    
+
     Args:
         match: Match data dictionary from API (enriched with guild info)
         world_id: World/server ID being tracked
@@ -233,59 +459,82 @@ def update_guild_tracking(match, world_id):
     try:
         # The wvw_tracker will handle guild extraction and updates
         wvw_tracker.update_match(match, world_id)
-        print(f"[GUILDS] Updated guild tracking for match {match.get('id')}")
+        logger.info(f"Updated guild tracking for match {match.get('id')}")
     except Exception as e:
-        print(f"[GUILDS] Error updating guild tracking: {e}")
+        logger.error(f"Error updating guild tracking: {e}")
 
 def kdr_tracking_loop():
     """
     Background thread that records WvW tracking data every 15 minutes.
-    
+
     Collects three types of data:
     1. K/D ratios for trend analysis
     2. Objective ownership for capture activity
     3. Guild claims for guild tracking
-    
+
     Runs continuously in the background with 15-minute intervals.
     Data is stored with 7-day retention matching matchup duration.
     """
-    print("[TRACKING] Starting WvW tracking background thread (K/D + Activity + Guilds)")
-    
+    logger.info("Starting WvW tracking background thread (K/D + Activity + Guilds)")
+
+    # Get tracked world from environment or use default
+    tracked_world = int(os.getenv('GW2_TRACKED_WORLD', '1020'))
+    logger.info(f"Tracking world ID: {tracked_world}")
+
     while True:
         try:
-            # Track for world 1020 (Anvil Rock)
-            # You can expand this to track multiple worlds
             client = GW2API()
-            match = client.get_wvw_match_by_world(1020)
-            
+
+            # Fetch base match data
+            match = client.get_wvw_match_by_world(tracked_world)
+
             if match and 'id' in match:
                 match_id = match['id']
-                
+
                 # Record K/D and activity snapshots
-                record_kdr_snapshot(match_id, 1020)
-                record_activity_snapshot(match_id, 1020)
-                
-                # Update guild tracking (this will fetch enriched match data with guild info)
-                # We need to get the enriched version, so make an internal request
+                record_kdr_snapshot(match_id, tracked_world)
+                record_activity_snapshot(match_id, tracked_world)
+
+                # Enrich match data with guild info for tracking
                 try:
-                    import requests
-                    enriched_response = requests.get('http://localhost:5555/api/wvw/match/1020', timeout=30)
-                    if enriched_response.status_code == 200:
-                        enriched_data = enriched_response.json()
-                        if enriched_data.get('status') == 'success':
-                            update_guild_tracking(enriched_data['data'], 1020)
+                    # Get world names for enrichment
+                    worlds = client.get_worlds()
+                    world_map = {w['id']: w['name'] for w in worlds}
+
+                    # Collect guild IDs from this match
+                    guild_ids = set()
+                    for map_data in match.get('maps', []):
+                        for obj in map_data.get('objectives', []):
+                            if obj.get('claimed_by'):
+                                guild_ids.add(obj['claimed_by'])
+
+                    # Fetch guild information in parallel
+                    guild_map = {}
+                    if guild_ids:
+                        limited_guild_ids = list(guild_ids)[:30]
+                        try:
+                            guilds = client.get_guilds(limited_guild_ids, public_only=True, max_workers=10)
+                            guild_map = {g['id']: g for g in guilds}
+                        except Exception as e:
+                            logger.warning(f"Could not fetch guilds in tracking loop: {e}")
+
+                    # Get player's team info for proper team name display
+                    player_team_id, player_color = get_player_team_info(client, match, tracked_world)
+
+                    # Build enriched match data structure
+                    enriched = build_enriched_match(match, world_map, guild_map, player_team_id, player_color)
+
+                    # Update guild tracking with enriched data
+                    update_guild_tracking(enriched, tracked_world)
+
                 except Exception as e:
-                    print(f"[TRACKING] Error fetching enriched match for guild tracking: {e}")
-        
+                    logger.error(f"Error enriching match data: {e}")
+
         except Exception as e:
-            print(f"[TRACKING] Loop error: {e}")
-        
+            logger.error(f"Tracking loop error: {e}")
+
         # Wait 15 minutes before next snapshot
         time.sleep(15 * 60)
-
-# Start tracking thread
-kdr_thread = threading.Thread(target=kdr_tracking_loop, daemon=True)
-kdr_thread.start()
 
 
 # Add cache control headers to prevent browser caching during development
@@ -299,6 +548,27 @@ def add_header(response):
 
 
 # Helper functions
+def validate_world_id(world_id):
+    """
+    Validate world ID parameter.
+
+    Args:
+        world_id: World ID string from request
+
+    Returns:
+        Tuple of (is_valid, error_message, parsed_id)
+    """
+    try:
+        parsed_id = int(world_id)
+        if parsed_id <= 0:
+            return False, "World ID must be positive", None
+        if parsed_id > 99999:  # Reasonable upper bound
+            return False, "Invalid world ID", None
+        return True, None, parsed_id
+    except (ValueError, TypeError):
+        return False, "World ID must be a valid integer", None
+
+
 def get_current_api_key():
     """Get the current API key from environment."""
     return os.getenv('GW2_API_KEY', '')
@@ -749,14 +1019,14 @@ def get_wvw_matches():
                 if color in match.get('all_worlds', {}):
                     world_ids = match['all_worlds'][color]
                     main_world = match['worlds'][color]
-                    
-                    # Use the main world name as display name
-                    # The relink IDs (11xxx) don't have stable mappings in the API
-                    display_name = world_map.get(main_world, f'World {main_world}')
-                    
+
+                    # Use alliance name if available, otherwise world name
+                    world_name = world_map.get(main_world, f'World {main_world}')
+                    display_name = get_alliance_display_name(main_world, world_name)
+
                     enriched_match['worlds'][color] = {
                         'main_world_id': main_world,
-                        'main_world_name': world_map.get(main_world, f'World {main_world}'),
+                        'main_world_name': world_name,
                         'display_name': display_name,
                         'display_world_id': main_world,
                         'linked_worlds': [
@@ -819,14 +1089,157 @@ def get_wvw_matches():
         }), 400
 
 
+@app.route('/api/wvw/stats/<world_id>')
+def get_wvw_stats(world_id):
+    """Get enhanced WvW statistics including PPT, territory control, and skirmish info."""
+    is_valid, error_msg, parsed_world_id = validate_world_id(world_id)
+    if not is_valid:
+        return jsonify({
+            'status': 'error',
+            'message': error_msg
+        }), 400
+
+    try:
+        client = GW2API()
+        match = client.get_wvw_match_by_world(parsed_world_id)
+
+        if not match:
+            return jsonify({
+                'status': 'error',
+                'message': 'Match not found'
+            }), 404
+
+        # Calculate PPT (Points Per Tick) for each team
+        ppt = {'red': 0, 'green': 0, 'blue': 0}
+        objectives_count = {'red': 0, 'green': 0, 'blue': 0}
+        objective_types = {
+            'red': {'Camp': 0, 'Tower': 0, 'Keep': 0, 'Castle': 0},
+            'green': {'Camp': 0, 'Tower': 0, 'Keep': 0, 'Castle': 0},
+            'blue': {'Camp': 0, 'Tower': 0, 'Keep': 0, 'Castle': 0}
+        }
+
+        for map_data in match.get('maps', []):
+            for obj in map_data.get('objectives', []):
+                owner = obj.get('owner', '').lower()
+                if owner in ['red', 'green', 'blue']:
+                    points = obj.get('points_tick', 0)
+                    ppt[owner] += points
+                    objectives_count[owner] += 1
+
+                    # Track objective types
+                    obj_type = obj.get('type', 'Unknown')
+                    if obj_type in objective_types[owner]:
+                        objective_types[owner][obj_type] += 1
+
+        # Calculate territory control percentage
+        total_objectives = sum(objectives_count.values())
+        territory_control = {
+            'red': round((objectives_count['red'] / total_objectives * 100) if total_objectives > 0 else 0, 1),
+            'green': round((objectives_count['green'] / total_objectives * 100) if total_objectives > 0 else 0, 1),
+            'blue': round((objectives_count['blue'] / total_objectives * 100) if total_objectives > 0 else 0, 1)
+        }
+
+        # Get current scores and calculate momentum
+        scores = match.get('scores', {})
+        current_scores = normalize_team_data(scores)
+
+        # Calculate score momentum (score per hour based on PPT)
+        # PPT happens every 5 minutes = 12 ticks per hour
+        projected_score_per_hour = {
+            color: ppt[color] * 12 for color in ['red', 'green', 'blue']
+        }
+
+        # Get skirmish information
+        skirmishes = match.get('skirmishes', [])
+        current_skirmish = None
+        next_skirmish_time = None
+
+        if skirmishes:
+            # Get the most recent skirmish
+            current_skirmish = skirmishes[-1]
+
+            # Calculate time until next skirmish (skirmishes are 2 hours)
+            match_start = datetime.fromisoformat(match['start_time'].replace('Z', '+00:00'))
+            match_start_naive = match_start.replace(tzinfo=None)
+            now = datetime.utcnow()
+            elapsed = (now - match_start_naive).total_seconds()
+
+            # Skirmishes are 2 hours (7200 seconds)
+            skirmish_duration = 7200
+            current_skirmish_number = int(elapsed // skirmish_duration) + 1
+            next_skirmish_time = match_start_naive + timedelta(seconds=current_skirmish_number * skirmish_duration)
+            seconds_to_next = (next_skirmish_time - now).total_seconds()
+
+            if seconds_to_next < 0:
+                seconds_to_next = 0
+
+        # Get victory points
+        victory_points = normalize_team_data(match.get('victory_points', {}))
+
+        # Get world names
+        worlds = client.get_worlds()
+        world_map = {w['id']: w['name'] for w in worlds}
+
+        # Get team IDs for all teams from all_worlds arrays
+        all_team_ids = get_all_team_ids(match)
+
+        team_names = {}
+        for color in ['red', 'green', 'blue']:
+            if color in match.get('worlds', {}):
+                main_world = match['worlds'][color]
+                world_name = world_map.get(main_world, f'World {main_world}')
+
+                # Use team ID if available, otherwise use world ID
+                team_id = all_team_ids.get(color)
+                if team_id:
+                    team_names[color] = get_alliance_display_name(team_id, world_name)
+                else:
+                    team_names[color] = get_alliance_display_name(main_world, world_name)
+
+        return jsonify({
+            'status': 'success',
+            'match_id': match['id'],
+            'team_names': team_names,
+            'ppt': ppt,
+            'territory_control': territory_control,
+            'objectives_count': objectives_count,
+            'objective_types': objective_types,
+            'current_scores': current_scores,
+            'victory_points': victory_points,
+            'projected_score_per_hour': projected_score_per_hour,
+            'skirmish': {
+                'current': current_skirmish_number if 'current_skirmish_number' in locals() else None,
+                'total': len(skirmishes),
+                'seconds_to_next': int(seconds_to_next) if 'seconds_to_next' in locals() else None,
+                'next_time': next_skirmish_time.isoformat() + 'Z' if next_skirmish_time else None
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 400
+
+
 @app.route('/api/wvw/match/<world_id>')
 def get_wvw_match_for_world(world_id):
     """Get WvW match information for a specific world."""
     import time
     start_time = time.time()
-    
+
+    # Validate world ID
+    is_valid, error_msg, parsed_world_id = validate_world_id(world_id)
+    if not is_valid:
+        return jsonify({
+            'status': 'error',
+            'message': error_msg
+        }), 400
+
     try:
-        print(f"\n[PERF] Starting /api/wvw/match/{world_id}")
+        logger.debug(f"Starting /api/wvw/match/{world_id}")
         client = GW2API()
         
         # Fetch match
@@ -896,18 +1309,27 @@ def get_wvw_match_for_world(world_id):
             'maps': []
         }
         
+        # Get team IDs for all teams from all_worlds arrays
+        all_team_ids = get_all_team_ids(match)
+
         # Process teams
         for color in ['red', 'blue', 'green']:
             if color in match.get('all_worlds', {}):
                 world_ids = match['all_worlds'][color]
                 main_world = match['worlds'][color]
-                
-                # Use the main world name as display name
-                display_name = world_map.get(main_world, f'World {main_world}')
-                
+
+                world_name = world_map.get(main_world, f'World {main_world}')
+
+                # Use team ID if available (from all_worlds array), otherwise use main_world
+                team_id = all_team_ids.get(color)
+                if team_id:
+                    display_name = get_alliance_display_name(team_id, world_name)
+                else:
+                    display_name = get_alliance_display_name(main_world, world_name)
+
                 enriched['worlds'][color] = {
                     'main_world_id': main_world,
-                    'main_world_name': world_map.get(main_world, f'World {main_world}'),
+                    'main_world_name': world_name,
                     'display_name': display_name,
                     'display_world_id': main_world,
                     'linked_worlds': [
@@ -1054,19 +1476,69 @@ def get_active_tracked_matches():
 @app.route('/api/wvw/activity/<world_id>')
 def get_wvw_activity(world_id):
     """Get WvW activity timeline for a specific world's match."""
+    # Validate world ID
+    is_valid, error_msg, parsed_world_id = validate_world_id(world_id)
+    if not is_valid:
+        return jsonify({
+            'status': 'error',
+            'message': error_msg
+        }), 400
+
+    # Get time window parameter (6h, 24h, or 7d)
+    time_window = request.args.get('window', '6h')
+
+    # Calculate bucket parameters based on window
+    if time_window == '6h':
+        bucket_size = 15  # 15 minutes
+        num_buckets = 24  # 6 hours
+    elif time_window == '24h':
+        bucket_size = 60  # 1 hour
+        num_buckets = 24  # 24 hours
+    elif time_window == '7d':
+        bucket_size = 6 * 60  # 6 hours
+        num_buckets = 28  # 7 days
+    else:
+        # Default to 6h if invalid
+        bucket_size = 15
+        num_buckets = 24
+
     try:
-        # Get enriched match data from our own endpoint
-        import requests
-        match_response = requests.get(f'http://localhost:5555/api/wvw/match/{world_id}', timeout=10)
-        match_result = match_response.json()
-        
-        if match_result['status'] != 'success':
+        # Get match data directly instead of internal HTTP request
+        client = GW2API()
+        match = client.get_wvw_match_by_world(parsed_world_id)
+
+        if not match:
             return jsonify({
                 'status': 'error',
                 'message': 'Failed to get match data'
             }), 404
-        
-        match = match_result['data']
+
+        # Enrich match data with world names and guild info
+        worlds = client.get_worlds()
+        world_map = {w['id']: w['name'] for w in worlds}
+
+        # Collect guild IDs
+        guild_ids = set()
+        for map_data in match.get('maps', []):
+            for obj in map_data.get('objectives', []):
+                if obj.get('claimed_by'):
+                    guild_ids.add(obj['claimed_by'])
+
+        # Fetch guild information
+        guild_map = {}
+        if guild_ids:
+            limited_guild_ids = list(guild_ids)[:30]
+            try:
+                guilds = client.get_guilds(limited_guild_ids, public_only=True, max_workers=10)
+                guild_map = {g['id']: g for g in guilds}
+            except Exception as e:
+                print(f"[ACTIVITY] Could not fetch guilds: {e}")
+
+        # Get player's team info for proper team name display
+        player_team_id, player_color = get_player_team_info(client, match, parsed_world_id)
+
+        # Build enriched match
+        match = build_enriched_match(match, world_map, guild_map, player_team_id, player_color)
         match_id = match.get('id')
         
         # Get current objective counts for fallback
@@ -1133,10 +1605,8 @@ def get_wvw_activity(world_id):
         with activity_history_lock:
             history = load_activity_history()
             historical_snapshots = history.get(match_id, [])
-        
-        # Generate timeline buckets using historical data
-        bucket_size = 15  # minutes
-        num_buckets = 24  # 6 hours
+
+        # Generate timeline buckets using historical data (bucket_size and num_buckets set above)
         now = datetime.utcnow()
         
         timeline_buckets = []
@@ -1160,6 +1630,7 @@ def get_wvw_activity(world_id):
                 bucket_data = {
                     'time_label': f"{bucket_index * bucket_size // 60}h {bucket_index * bucket_size % 60}m ago",
                     'minutes_ago': int((now - bucket_end_time).total_seconds() / 60),
+                    'timestamp': bucket_end_time.isoformat() + 'Z',
                     'red': latest_snapshot['red_objectives'],
                     'green': latest_snapshot['green_objectives'],
                     'blue': latest_snapshot['blue_objectives'],
@@ -1173,6 +1644,7 @@ def get_wvw_activity(world_id):
                 bucket_data = {
                     'time_label': f"{bucket_index * bucket_size // 60}h {bucket_index * bucket_size % 60}m ago",
                     'minutes_ago': int((now - bucket_end_time).total_seconds() / 60),
+                    'timestamp': bucket_end_time.isoformat() + 'Z',
                     'red': current_objectives['red'],
                     'green': current_objectives['green'],
                     'blue': current_objectives['blue'],
@@ -1217,55 +1689,309 @@ def get_wvw_activity(world_id):
         }), 400
 
 
+@app.route('/api/wvw/ppt/<world_id>')
+def get_wvw_ppt(world_id):
+    """Get WvW PPT (Points Per Tick) trends for coverage analysis."""
+    # Validate world ID
+    is_valid, error_msg, parsed_world_id = validate_world_id(world_id)
+    if not is_valid:
+        return jsonify({
+            'status': 'error',
+            'message': error_msg
+        }), 400
+
+    # Get time window parameter (6h, 24h, or 7d)
+    time_window = request.args.get('window', '6h')
+
+    # Calculate bucket parameters based on window
+    if time_window == '6h':
+        bucket_size = 15  # 15 minutes
+        num_buckets = 24  # 6 hours
+    elif time_window == '24h':
+        bucket_size = 60  # 1 hour
+        num_buckets = 24  # 24 hours
+    elif time_window == '7d':
+        bucket_size = 6 * 60  # 6 hours
+        num_buckets = 28  # 7 days
+    else:
+        # Default to 6h if invalid
+        bucket_size = 15
+        num_buckets = 24
+
+    try:
+        # Get current PPT stats
+        client = GW2API()
+        match = client.get_wvw_match_by_world(parsed_world_id)
+
+        if not match:
+            return jsonify({
+                'status': 'error',
+                'message': 'Match not found'
+            }), 404
+
+        # Calculate current PPT for each team
+        current_ppt = {'red': 0, 'green': 0, 'blue': 0}
+        for map_data in match.get('maps', []):
+            for obj in map_data.get('objectives', []):
+                owner = obj.get('owner', '').lower()
+                if owner in ['red', 'green', 'blue']:
+                    points = obj.get('points_tick', 0)
+                    current_ppt[owner] += points
+
+        # Get enriched match for team names
+        worlds = client.get_worlds()
+        world_map = {w['id']: w['name'] for w in worlds}
+
+        # Collect guild IDs
+        guild_ids = set()
+        for map_data in match.get('maps', []):
+            for obj in map_data.get('objectives', []):
+                if obj.get('claimed_by'):
+                    guild_ids.add(obj['claimed_by'])
+
+        # Fetch guild information
+        guild_map = {}
+        if guild_ids:
+            limited_guild_ids = list(guild_ids)[:30]
+            try:
+                guilds = client.get_guilds(limited_guild_ids, public_only=True, max_workers=10)
+                guild_map = {g['id']: g for g in guilds}
+            except Exception as e:
+                print(f"[PPT] Could not fetch guilds: {e}")
+
+        # Get player's team info for proper team name display
+        player_team_id, player_color = get_player_team_info(client, match, parsed_world_id)
+
+        # Build enriched match
+        match = build_enriched_match(match, world_map, guild_map, player_team_id, player_color)
+        match_id = match.get('id')
+
+        # Load historical activity data to calculate PPT over time
+        with activity_history_lock:
+            history = load_activity_history()
+            historical_snapshots = history.get(match_id, [])
+
+        # Generate timeline buckets using historical data
+        now = datetime.utcnow()
+
+        timeline_buckets = []
+
+        for i in range(num_buckets):
+            bucket_index = num_buckets - i - 1
+            bucket_start_time = now - timedelta(minutes=bucket_index * bucket_size)
+            bucket_end_time = now - timedelta(minutes=(bucket_index - 1) * bucket_size if bucket_index > 0 else 0)
+
+            # Find snapshots that fall within this bucket
+            bucket_snapshots = []
+            for snapshot in historical_snapshots:
+                snapshot_time = datetime.fromisoformat(snapshot['timestamp'].replace('Z', ''))
+                if bucket_start_time <= snapshot_time < bucket_end_time:
+                    bucket_snapshots.append(snapshot)
+
+            # Calculate PPT based on objective counts (estimate 5 points per objective on average)
+            if bucket_snapshots:
+                # Use the latest snapshot in this bucket
+                latest_snapshot = max(bucket_snapshots, key=lambda s: s['timestamp'])
+
+                # Estimate PPT based on objective types
+                def calc_ppt_from_types(types):
+                    return (types.get('Camp', 0) * 2 +
+                           types.get('Tower', 0) * 4 +
+                           types.get('Keep', 0) * 8 +
+                           types.get('Castle', 0) * 12)
+
+                bucket_data = {
+                    'timestamp': latest_snapshot['timestamp'],
+                    'minutes_ago': int((now - bucket_end_time).total_seconds() / 60),
+                    'red_ppt': calc_ppt_from_types(latest_snapshot.get('red_types', {})),
+                    'green_ppt': calc_ppt_from_types(latest_snapshot.get('green_types', {})),
+                    'blue_ppt': calc_ppt_from_types(latest_snapshot.get('blue_types', {}))
+                }
+            else:
+                # No historical data for this bucket, use current PPT
+                bucket_data = {
+                    'timestamp': bucket_end_time.isoformat() + 'Z',
+                    'minutes_ago': int((now - bucket_end_time).total_seconds() / 60),
+                    'red_ppt': current_ppt['red'],
+                    'green_ppt': current_ppt['green'],
+                    'blue_ppt': current_ppt['blue']
+                }
+
+            timeline_buckets.append(bucket_data)
+
+        # Get team names from enriched match data
+        team_names = {
+            'red': 'Red Team',
+            'green': 'Green Team',
+            'blue': 'Blue Team'
+        }
+
+        if 'worlds' in match:
+            for color in ['red', 'green', 'blue']:
+                if color in match['worlds']:
+                    world_data = match['worlds'][color]
+                    if isinstance(world_data, dict):
+                        team_names[color] = world_data.get('display_name') or world_data.get('main_world_name') or team_names[color]
+
+        return jsonify({
+            'status': 'success',
+            'match_id': match_id,
+            'timeline': timeline_buckets,
+            'team_names': team_names,
+            'current_ppt': current_ppt,
+            'snapshots_available': len(historical_snapshots)
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 400
+
+
+@app.route('/api/wvw/update-alliance-names', methods=['POST'])
+def update_alliance_names():
+    """Update alliance names from current matchup data."""
+    try:
+        client = GW2API()
+        matches = client.get_wvw_matches()
+        worlds = client.get_worlds()
+        world_map = {w['id']: w['name'] for w in worlds}
+
+        # Load current alliance names
+        alliance_file = Path('alliance_names.json')
+        with open(alliance_file, 'r') as f:
+            data = json.load(f)
+
+        # Update alliance names from all matches
+        updated_count = 0
+        for match in matches:
+            for color in ['red', 'green', 'blue']:
+                if color in match.get('worlds', {}):
+                    main_world = match['worlds'][color]
+                    world_name = world_map.get(main_world, f'World {main_world}')
+                    world_id_str = str(main_world)
+
+                    # Only update if not in overrides
+                    if world_id_str not in data.get('overrides', {}):
+                        # Update the alliance name
+                        if world_id_str not in data['alliances'] or data['alliances'][world_id_str] != world_name:
+                            data['alliances'][world_id_str] = world_name
+                            updated_count += 1
+
+        # Update timestamp
+        data['_last_updated'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+
+        # Save updated data
+        with open(alliance_file, 'w') as f:
+            json.dump(data, f, indent=2)
+
+        # Reload alliance names in memory
+        global ALLIANCE_OVERRIDES, TEAM_NAMES, ALLIANCE_NAMES
+        ALLIANCE_OVERRIDES, TEAM_NAMES, ALLIANCE_NAMES = load_alliance_names()
+
+        return jsonify({
+            'status': 'success',
+            'message': f'Updated {updated_count} alliance names',
+            'updated_count': updated_count
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 400
+
+
 @app.route('/api/wvw/kdr/<world_id>')
 def get_wvw_kdr(world_id):
     """Get WvW K/D ratio trends for a specific world's match."""
+    # Validate world ID
+    is_valid, error_msg, parsed_world_id = validate_world_id(world_id)
+    if not is_valid:
+        return jsonify({
+            'status': 'error',
+            'message': error_msg
+        }), 400
+
+    # Get time window parameter (6h, 24h, or 7d)
+    time_window = request.args.get('window', '6h')
+
+    # Calculate bucket parameters based on window
+    if time_window == '6h':
+        bucket_size = 15  # 15 minutes
+        num_buckets = 24  # 6 hours
+    elif time_window == '24h':
+        bucket_size = 60  # 1 hour
+        num_buckets = 24  # 24 hours
+    elif time_window == '7d':
+        bucket_size = 6 * 60  # 6 hours
+        num_buckets = 28  # 7 days
+    else:
+        # Default to 6h if invalid
+        bucket_size = 15
+        num_buckets = 24
+
     try:
-        # Get enriched match data from our own endpoint
-        import requests
-        match_response = requests.get(f'http://localhost:5555/api/wvw/match/{world_id}', timeout=10)
-        match_result = match_response.json()
-        
-        if match_result['status'] != 'success':
+        # Get match data directly instead of internal HTTP request
+        client = GW2API()
+        match = client.get_wvw_match_by_world(parsed_world_id)
+
+        if not match:
             return jsonify({
                 'status': 'error',
                 'message': 'Failed to get match data'
             }), 404
-        
-        match = match_result['data']
+
+        # Enrich match data with world names
+        worlds = client.get_worlds()
+        world_map = {w['id']: w['name'] for w in worlds}
+
+        # Collect guild IDs
+        guild_ids = set()
+        for map_data in match.get('maps', []):
+            for obj in map_data.get('objectives', []):
+                if obj.get('claimed_by'):
+                    guild_ids.add(obj['claimed_by'])
+
+        # Fetch guild information
+        guild_map = {}
+        if guild_ids:
+            limited_guild_ids = list(guild_ids)[:30]
+            try:
+                guilds = client.get_guilds(limited_guild_ids, public_only=True, max_workers=10)
+                guild_map = {g['id']: g for g in guilds}
+            except Exception as e:
+                print(f"[KDR] Could not fetch guilds: {e}")
+
+        # Get player's team info for proper team name display
+        player_team_id, player_color = get_player_team_info(client, match, parsed_world_id)
+
+        # Build enriched match
+        match = build_enriched_match(match, world_map, guild_map, player_team_id, player_color)
         match_id = match.get('id')
         
-        # Get current K/D for each team
-        kills_data = match.get('kills', {})
-        deaths_data = match.get('deaths', {})
-        
-        current_kills = {
-            'red': kills_data.get('red', kills_data.get('Red', 0)),
-            'green': kills_data.get('green', kills_data.get('Green', 0)),
-            'blue': kills_data.get('blue', kills_data.get('Blue', 0))
-        }
-        
-        current_deaths = {
-            'red': max(deaths_data.get('red', deaths_data.get('Red', 1)), 1),  # Avoid division by zero
-            'green': max(deaths_data.get('green', deaths_data.get('Green', 1)), 1),
-            'blue': max(deaths_data.get('blue', deaths_data.get('Blue', 1)), 1)
-        }
-        
+        # Get current K/D for each team (normalized)
+        current_kills = normalize_team_data(match.get('kills', {}))
+        current_deaths = normalize_team_data(match.get('deaths', {}))
+
+        # Ensure deaths are at least 1 to avoid division by zero
+        current_deaths = {k: max(v, 1) for k, v in current_deaths.items()}
+
         # Calculate K/D ratios
         current_kdr = {
-            'red': round(current_kills['red'] / max(current_deaths['red'], 1), 2),
-            'green': round(current_kills['green'] / max(current_deaths['green'], 1), 2),
-            'blue': round(current_kills['blue'] / max(current_deaths['blue'], 1), 2)
+            color: round(current_kills[color] / current_deaths[color], 2)
+            for color in ['red', 'green', 'blue']
         }
         
         # Load historical data
         with kdr_history_lock:
             history = load_kdr_history()
             historical_snapshots = history.get(match_id, [])
-        
-        # Generate timeline buckets
-        bucket_size = 15  # minutes
-        num_buckets = 24  # 6 hours
+
+        # Generate timeline buckets (bucket_size and num_buckets set above)
         now = datetime.utcnow()
         
         timeline_buckets = []
@@ -1365,5 +2091,9 @@ if __name__ == '__main__':
     print("\n  Starting server at http://localhost:5555")
     print("  Press Ctrl+C to stop\n")
     print("=" * 60)
-    
+
+    # Start tracking thread after Flask initialization
+    kdr_thread = threading.Thread(target=kdr_tracking_loop, daemon=True)
+    kdr_thread.start()
+
     app.run(debug=True, host='0.0.0.0', port=5555)

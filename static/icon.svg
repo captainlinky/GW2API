@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="#1a1a1a" stroke="#d4af37" stroke-width="3"/>
+
+  <!-- Crossed swords -->
+  <!-- Left sword (red team) -->
+  <g transform="rotate(-45 50 50)">
+    <rect x="30" y="48" width="40" height="4" fill="#ff6b6b"/>
+    <polygon points="70,48 75,50 70,52" fill="#ff6b6b"/>
+    <rect x="28" y="47" width="4" height="6" fill="#d4af37"/>
+  </g>
+
+  <!-- Right sword (blue team) -->
+  <g transform="rotate(45 50 50)">
+    <rect x="30" y="48" width="40" height="4" fill="#6b6bff"/>
+    <polygon points="70,48 75,50 70,52" fill="#6b6bff"/>
+    <rect x="28" y="47" width="4" height="6" fill="#d4af37"/>
+  </g>
+
+  <!-- Center shield (green team) -->
+  <circle cx="50" cy="50" r="8" fill="#6bff6b"/>
+  <circle cx="50" cy="50" r="6" fill="#1a1a1a"/>
+  <text x="50" cy="50" y="54" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#d4af37" text-anchor="middle">W</text>
+</svg>

@@ -7,9 +7,13 @@ Tracks guilds claiming objectives across the matchup week.
 import json
 import os
 import sys
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Set
 from pathlib import Path
+
+# Configure logging
+logger = logging.getLogger('WvWTracker')
 
 # Import fcntl only on Unix systems (not available on Windows)
 if sys.platform != 'win32':
@@ -55,8 +59,8 @@ class WvWTracker:
                         if HAS_FCNTL:
                             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"[WVW_TRACKER] Error loading match data: {e}")
-                print(f"[WVW_TRACKER] Resetting corrupted match data file")
+                logger.error(f"Error loading match data: {e}")
+                logger.warning("Resetting corrupted match data file")
                 return {}
         return {}
     
@@ -89,7 +93,7 @@ class WvWTracker:
                     if HAS_FCNTL:
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except IOError as e:
-            print(f"[WVW_TRACKER] Error saving match data: {e}")
+            logger.error(f"Error saving match data: {e}")
     
     def update_match(self, match_data: Dict, world_id: int = None):
         """

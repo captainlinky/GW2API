@@ -100,6 +100,99 @@ window.GW2Data = {
     }
 };
 
+// Enhanced WvW Stats with skirmish timer
+let skirmishTimerInterval = null;
+
+async function updateEnhancedWvWStats() {
+    try {
+        const response = await fetch('/api/wvw/stats/1020');
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            // Update PPT
+            document.getElementById('ppt-red').textContent = data.ppt.red || '--';
+            document.getElementById('ppt-green').textContent = data.ppt.green || '--';
+            document.getElementById('ppt-blue').textContent = data.ppt.blue || '--';
+
+            // Update alliance names with colors in PPT labels
+            if (data.team_names) {
+                const pptRedLabel = document.getElementById('ppt-red-label');
+                const pptGreenLabel = document.getElementById('ppt-green-label');
+                const pptBlueLabel = document.getElementById('ppt-blue-label');
+
+                if (pptRedLabel) pptRedLabel.textContent = `${data.team_names.red}:`;
+                if (pptGreenLabel) pptGreenLabel.textContent = `${data.team_names.green}:`;
+                if (pptBlueLabel) pptBlueLabel.textContent = `${data.team_names.blue}:`;
+
+                // Update territory control team names
+                const territoryRedTeam = document.getElementById('territory-red-team');
+                const territoryGreenTeam = document.getElementById('territory-green-team');
+                const territoryBlueTeam = document.getElementById('territory-blue-team');
+
+                if (territoryRedTeam) territoryRedTeam.textContent = data.team_names.red;
+                if (territoryGreenTeam) territoryGreenTeam.textContent = data.team_names.green;
+                if (territoryBlueTeam) territoryBlueTeam.textContent = data.team_names.blue;
+            }
+
+            // Update territory control
+            updateTerritoryControl(data);
+
+            // Update skirmish timer
+            if (data.skirmish && data.skirmish.seconds_to_next !== null) {
+                startSkirmishCountdown(data.skirmish.seconds_to_next, data.skirmish.current, data.skirmish.total);
+            }
+        }
+    } catch (error) {
+        console.error('Error updating enhanced WvW stats:', error);
+    }
+}
+
+function updateTerritoryControl(data) {
+    const colors = ['red', 'green', 'blue'];
+
+    colors.forEach(color => {
+        const percent = data.territory_control[color] || 0;
+        const objectives = data.objectives_count[color] || 0;
+        const types = data.objective_types[color] || {};
+
+        document.getElementById(`territory-${color}-percent`).textContent = `${percent}%`;
+        document.getElementById(`territory-${color}-bar`).style.width = `${percent}%`;
+
+        // Build details string
+        const details = `${objectives} obj (${types.Camp || 0}C, ${types.Tower || 0}T, ${types.Keep || 0}K, ${types.Castle || 0}S)`;
+        document.getElementById(`territory-${color}-details`).textContent = details;
+    });
+}
+
+function startSkirmishCountdown(secondsRemaining, currentSkirmish, totalSkirmishes) {
+    // Clear existing interval
+    if (skirmishTimerInterval) {
+        clearInterval(skirmishTimerInterval);
+    }
+
+    let remaining = secondsRemaining;
+
+    function updateDisplay() {
+        const hours = Math.floor(remaining / 3600);
+        const minutes = Math.floor((remaining % 3600) / 60);
+        const seconds = remaining % 60;
+
+        const display = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        document.getElementById('skirmish-countdown').textContent = display;
+        document.getElementById('skirmish-info').textContent = `Skirmish ${currentSkirmish} / ${totalSkirmishes}`;
+
+        if (remaining > 0) {
+            remaining--;
+        } else {
+            // Skirmish ended, refresh stats
+            updateEnhancedWvWStats();
+        }
+    }
+
+    updateDisplay();
+    skirmishTimerInterval = setInterval(updateDisplay, 1000);
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
     setupTabs();
@@ -109,12 +202,17 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTeamBars();
     updateActivityTimeline();
     updateKDRTimeline();
+    updatePPTTimeline();
+    updateEnhancedWvWStats();
+
     // Refresh stats every 60 seconds
     setInterval(() => {
         updateDashboardStats();
         updateTeamBars();
         updateActivityTimeline();
         updateKDRTimeline();
+        updatePPTTimeline();
+        updateEnhancedWvWStats();
     }, 60000);
 });
 
@@ -414,10 +512,11 @@ function populateTeamGuildsDropdown(team, dropdown) {
 
 // Activity Timeline Visualization
 let activityChartData = null;
+let activityTimeWindow = '6h';  // Default time window
 
 async function updateActivityTimeline() {
     try {
-        const response = await fetch('/api/wvw/activity/1020');
+        const response = await fetch(`/api/wvw/activity/1020?window=${activityTimeWindow}`);
         const data = await response.json();
         
         if (data.status === 'success' && data.timeline) {
@@ -429,6 +528,11 @@ async function updateActivityTimeline() {
                 document.getElementById('legend-red-team').textContent = data.team_names.red || 'Red Team';
                 document.getElementById('legend-green-team').textContent = data.team_names.green || 'Green Team';
                 document.getElementById('legend-blue-team').textContent = data.team_names.blue || 'Blue Team';
+
+                // Apply team colors to legend team names
+                applyTeamColor('legend-red-team', '#ff6b6b');
+                applyTeamColor('legend-green-team', '#6bff6b');
+                applyTeamColor('legend-blue-team', '#6b6bff');
             }
             
             renderActivityChart(data.timeline, data.team_names);
@@ -586,15 +690,42 @@ function renderActivityChart(timeline, teamNames) {
     ctx.fillStyle = '#a0a0a0';
     ctx.font = '11px Arial';
     ctx.textAlign = 'center';
-    
+
+    // Determine label interval based on number of buckets and time window
+    let labelInterval;
+    if (timeline.length <= 24) {
+        // 6h view (24 buckets): show every 4th label (every hour)
+        labelInterval = 4;
+    } else if (timeline.length <= 48) {
+        // 24h view: show every 4th label
+        labelInterval = 4;
+    } else {
+        // 7d view: show every 4th label
+        labelInterval = 4;
+    }
+
     timeline.forEach((bucket, index) => {
-        // Show time label every hour
-        if (timeLabels[index].minute === 0) {
+        // Show label based on interval
+        if (index % labelInterval === 0 || index === timeline.length - 1) {
             const x = padding.left + index * xStep;
-            ctx.fillText(timeLabels[index].label, x, padding.top + chartHeight + 20);
+            // For longer time windows (7-day view), show day of week + date
+            if (timeline.length > 48) {
+                let time;
+                if (bucket.timestamp) {
+                    time = new Date(bucket.timestamp);
+                } else {
+                    time = new Date(now.getTime() - bucket.minutes_ago * 60000);
+                }
+                const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const dayName = dayNames[time.getDay()];
+                const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
+                ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+            } else {
+                ctx.fillText(timeLabels[index].label, x, padding.top + chartHeight + 20);
+            }
         }
     });
-    
+
     // Draw Y-axis labels
     ctx.textAlign = 'right';
     for (let i = 0; i <= 5; i++) {
@@ -602,7 +733,7 @@ function renderActivityChart(timeline, teamNames) {
         const value = Math.round(maxValue * (1 - i / 5));
         ctx.fillText(value.toString(), padding.left - 10, y + 4);
     }
-    
+
     // Y-axis label
     ctx.fillStyle = '#d4af37';
     ctx.font = 'bold 12px Arial';
@@ -681,9 +812,25 @@ function showActivityTooltip(e, canvas, timeline, teamNames, padding, xStep) {
     
     // Calculate time for this bucket
     const now = new Date();
-    const time = new Date(now.getTime() - bucket.minutes_ago * 60000);
-    const timeLabel = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
-    
+    let time;
+    if (bucket.timestamp) {
+        time = new Date(bucket.timestamp);
+    } else {
+        time = new Date(now.getTime() - bucket.minutes_ago * 60000);
+    }
+
+    // Format time label based on time window
+    let timeLabel;
+    if (timeline.length > 48) {
+        // 7-day view: show day, date, and time
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayName = dayNames[time.getDay()];
+        timeLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()} ${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    } else {
+        // 6h or 24h view: show just time
+        timeLabel = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    }
+
     // Format tooltip content
     let html = `<div style="margin-bottom: 5px; font-weight: bold; color: #d4af37;">${timeLabel}</div>`;
     
@@ -745,10 +892,11 @@ function hideActivityTooltip() {
 
 // K/D Ratio Timeline Visualization
 let kdrChartData = null;
+let kdrTimeWindow = '6h';  // Default time window
 
 async function updateKDRTimeline() {
     try {
-        const response = await fetch('/api/wvw/kdr/1020');
+        const response = await fetch(`/api/wvw/kdr/1020?window=${kdrTimeWindow}`);
         const data = await response.json();
         
         if (data.status === 'success' && data.timeline) {
@@ -760,6 +908,11 @@ async function updateKDRTimeline() {
                 document.getElementById('kdr-legend-red-team').textContent = data.team_names.red || 'Red Team';
                 document.getElementById('kdr-legend-green-team').textContent = data.team_names.green || 'Green Team';
                 document.getElementById('kdr-legend-blue-team').textContent = data.team_names.blue || 'Blue Team';
+
+                // Apply team colors to legend team names
+                applyTeamColor('kdr-legend-red-team', '#ff6b6b');
+                applyTeamColor('kdr-legend-green-team', '#6bff6b');
+                applyTeamColor('kdr-legend-blue-team', '#6b6bff');
             }
             
             renderKDRChart(data.timeline, data.team_names, data.current_kills, data.current_deaths);
@@ -881,19 +1034,19 @@ function renderKDRChart(timeline, teamNames, kills, deaths) {
     // Helper function to draw line with points
     const drawKDRLine = (color, data, teamName) => {
         const points = [];
-        
+
         // Draw line
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        
+
         let firstPoint = true;
         data.forEach((kdr, index) => {
             const x = padding.left + index * xStep;
             const y = padding.top + chartHeight - (kdr / maxKDR) * chartHeight;
-            
+
             points.push({ x, y, kdr, index });
-            
+
             if (firstPoint) {
                 ctx.moveTo(x, y);
                 firstPoint = false;
@@ -901,23 +1054,23 @@ function renderKDRChart(timeline, teamNames, kills, deaths) {
                 ctx.lineTo(x, y);
             }
         });
-        
+
         ctx.stroke();
-        
-        // Draw points (circles) - only show first and last to keep it clean
-        [points[0], points[points.length - 1]].forEach(point => {
+
+        // Draw points (circles) - show all points
+        points.forEach(point => {
             if (point && point.kdr > 0) {
                 ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+                ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
                 ctx.fill();
-                
+
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
         });
-        
+
         return points;
     };
     
@@ -937,14 +1090,42 @@ function renderKDRChart(timeline, teamNames, kills, deaths) {
     ctx.fillStyle = '#a0a0a0';
     ctx.font = '11px Arial';
     ctx.textAlign = 'center';
-    
+
+    // Determine label interval based on number of buckets and time window
+    let labelInterval;
+    if (timeline.length <= 24) {
+        // 6h view (24 buckets): show every 4th label (every hour)
+        labelInterval = 4;
+    } else if (timeline.length <= 48) {
+        // 24h view: show every 4th label
+        labelInterval = 4;
+    } else {
+        // 7d view: show every 4th label
+        labelInterval = 4;
+    }
+
     timeline.forEach((bucket, index) => {
-        if (timeLabels[index].minute === 0) {
+        // Show label based on interval
+        if (index % labelInterval === 0 || index === timeline.length - 1) {
             const x = padding.left + index * xStep;
-            ctx.fillText(timeLabels[index].label, x, padding.top + chartHeight + 20);
+            // For longer time windows (7-day view), show day of week + date
+            if (timeline.length > 48) {
+                let time;
+                if (bucket.timestamp) {
+                    time = new Date(bucket.timestamp);
+                } else {
+                    time = new Date(now.getTime() - bucket.minutes_ago * 60000);
+                }
+                const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const dayName = dayNames[time.getDay()];
+                const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
+                ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+            } else {
+                ctx.fillText(timeLabels[index].label, x, padding.top + chartHeight + 20);
+            }
         }
     });
-    
+
     // Draw Y-axis labels
     ctx.textAlign = 'right';
     for (let i = 0; i <= 5; i++) {
@@ -952,7 +1133,7 @@ function renderKDRChart(timeline, teamNames, kills, deaths) {
         const value = (maxKDR * (1 - i / 5)).toFixed(1);
         ctx.fillText(value, padding.left - 10, y + 4);
     }
-    
+
     // Y-axis label
     ctx.fillStyle = '#d4af37';
     ctx.font = 'bold 12px Arial';
@@ -1028,11 +1209,27 @@ function showKDRTooltip(e, canvas, timeline, teamNames, kills, deaths, padding, 
     
     // Calculate time for this bucket
     const now = new Date();
-    const time = new Date(now.getTime() - bucket.minutes_ago * 60000);
-    const timeLabel = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
-    
+    let time;
+    if (bucket.timestamp) {
+        time = new Date(bucket.timestamp);
+    } else {
+        time = new Date(now.getTime() - bucket.minutes_ago * 60000);
+    }
+
+    // Format time label based on time window
+    let timeLabel;
+    if (timeline.length > 48) {
+        // 7-day view: show day, date, and time
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayName = dayNames[time.getDay()];
+        timeLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()} ${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    } else {
+        // 6h or 24h view: show just time
+        timeLabel = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    }
+
     // Format tooltip content
-    const teamIcon = nearestTeam.color === '#ff6b6b' ? '🔴' : 
+    const teamIcon = nearestTeam.color === '#ff6b6b' ? '🔴' :
                      nearestTeam.color === '#6bff6b' ? '🟢' : '🔵';
     
     let html = `<div style="margin-bottom: 5px; font-weight: bold; color: #d4af37;">${timeLabel}</div>`;
@@ -1071,6 +1268,389 @@ function hideKDRTooltip() {
     const tooltip = document.getElementById('kdr-tooltip');
     if (tooltip) {
         tooltip.style.display = 'none';
+    }
+}
+
+// Time Window Selection Functions
+function setActivityTimeWindow(window) {
+    activityTimeWindow = window;
+
+    // Update button states
+    document.querySelectorAll('[id^="activity-window-"]').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById(`activity-window-${window}`).classList.add('active');
+
+    // Reload chart with new window
+    updateActivityTimeline();
+}
+
+function setKDRTimeWindow(window) {
+    kdrTimeWindow = window;
+
+    // Update button states
+    document.querySelectorAll('[id^="kdr-window-"]').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById(`kdr-window-${window}`).classList.add('active');
+
+    // Reload chart with new window
+    updateKDRTimeline();
+}
+
+// PPT Coverage Analysis Chart
+let pptChartData = null;
+let pptTimeWindow = '6h';  // Default time window
+
+async function updatePPTTimeline() {
+    try {
+        const response = await fetch(`/api/wvw/ppt/1020?window=${pptTimeWindow}`);
+        const data = await response.json();
+
+        if (data.status === 'success' && data.timeline) {
+            console.log('PPT data received:', data.timeline.length, 'buckets');
+            pptChartData = data;
+
+            // Update legend with team names
+            if (data.team_names) {
+                document.getElementById('ppt-legend-red-team').textContent = data.team_names.red || 'Red Team';
+                document.getElementById('ppt-legend-green-team').textContent = data.team_names.green || 'Green Team';
+                document.getElementById('ppt-legend-blue-team').textContent = data.team_names.blue || 'Blue Team';
+
+                // Apply team colors to legend team names
+                applyTeamColor('ppt-legend-red-team', '#ff6b6b');
+                applyTeamColor('ppt-legend-green-team', '#6bff6b');
+                applyTeamColor('ppt-legend-blue-team', '#6b6bff');
+            }
+
+            renderPPTChart(data.timeline, data.team_names, data.current_ppt);
+        } else {
+            console.error('PPT data error:', data);
+        }
+    } catch (error) {
+        console.error('Error updating PPT timeline:', error);
+    }
+}
+
+function renderPPTChart(timeline, teamNames, currentPPT) {
+    const canvas = document.getElementById('ppt-chart');
+    if (!canvas) {
+        console.error('PPT chart canvas not found');
+        return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('ppt-chart-container');
+
+    // Set canvas size
+    const containerWidth = container.clientWidth || container.offsetWidth || 800;
+    canvas.width = containerWidth - 30;
+    canvas.height = 250;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const padding = { top: 30, right: 30, bottom: 50, left: 50 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Calculate time labels
+    const now = new Date();
+    const timeLabels = timeline.map((bucket, index) => {
+        const minutesAgo = bucket.minutes_ago;
+        const time = new Date(now.getTime() - minutesAgo * 60000);
+        return {
+            hour: time.getHours(),
+            minute: time.getMinutes(),
+            label: `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`
+        };
+    });
+
+    // Find max PPT for scaling
+    const maxPPT = Math.max(
+        Math.max(...timeline.map(b => b.red_ppt)),
+        Math.max(...timeline.map(b => b.green_ppt)),
+        Math.max(...timeline.map(b => b.blue_ppt)),
+        50  // Minimum scale of 50 PPT
+    );
+
+    // Draw background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillRect(padding.left, padding.top, chartWidth, chartHeight);
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+
+    // Horizontal grid lines
+    for (let i = 0; i <= 5; i++) {
+        const y = padding.top + (chartHeight / 5) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(padding.left + chartWidth, y);
+        ctx.stroke();
+    }
+
+    // Vertical grid lines
+    const xStep = chartWidth / (timeline.length - 1);
+    for (let i = 0; i < timeline.length; i++) {
+        if (timeLabels[i].minute === 0) {
+            const x = padding.left + i * xStep;
+            ctx.beginPath();
+            ctx.moveTo(x, padding.top);
+            ctx.lineTo(x, padding.top + chartHeight);
+            ctx.stroke();
+        }
+    }
+
+    // Draw axes
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, padding.top + chartHeight);
+    ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+    ctx.stroke();
+
+    // Helper function to draw line with points
+    const drawPPTLine = (color, data, teamName) => {
+        const points = [];
+
+        // Draw line
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+
+        let firstPoint = true;
+        data.forEach((ppt, index) => {
+            const x = padding.left + index * xStep;
+            const y = padding.top + chartHeight - (ppt / maxPPT) * chartHeight;
+
+            points.push({ x, y, ppt, index });
+
+            if (firstPoint) {
+                ctx.moveTo(x, y);
+                firstPoint = false;
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+
+        ctx.stroke();
+
+        // Draw points (circles)
+        points.forEach(point => {
+            if (point.ppt > 0) {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Add a white border to make points more visible
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        });
+
+        return points;
+    };
+
+    // Draw all three team lines
+    const redData = timeline.map(b => b.red_ppt);
+    const greenData = timeline.map(b => b.green_ppt);
+    const blueData = timeline.map(b => b.blue_ppt);
+
+    const redPoints = drawPPTLine('#ff6b6b', redData, teamNames?.red);
+    const greenPoints = drawPPTLine('#6bff6b', greenData, teamNames?.green);
+    const bluePoints = drawPPTLine('#6b6bff', blueData, teamNames?.blue);
+
+    // Store points for tooltip detection
+    canvas.chartPoints = { red: redPoints, green: greenPoints, blue: bluePoints };
+
+    // Draw time labels on X-axis
+    ctx.fillStyle = '#a0a0a0';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+
+    // Determine label interval
+    let labelInterval;
+    if (timeline.length <= 24) {
+        labelInterval = 4;
+    } else if (timeline.length <= 48) {
+        labelInterval = 4;
+    } else {
+        labelInterval = 4;
+    }
+
+    timeline.forEach((bucket, index) => {
+        if (index % labelInterval === 0 || index === timeline.length - 1) {
+            const x = padding.left + index * xStep;
+            if (timeline.length > 48) {
+                let time;
+                if (bucket.timestamp) {
+                    time = new Date(bucket.timestamp);
+                } else {
+                    time = new Date(now.getTime() - bucket.minutes_ago * 60000);
+                }
+                const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const dayName = dayNames[time.getDay()];
+                const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
+                ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+            } else {
+                ctx.fillText(timeLabels[index].label, x, padding.top + chartHeight + 20);
+            }
+        }
+    });
+
+    // Draw Y-axis labels
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {
+        const y = padding.top + (chartHeight / 5) * i;
+        const value = Math.round(maxPPT * (1 - i / 5));
+        ctx.fillText(value.toString(), padding.left - 10, y + 4);
+    }
+
+    // Y-axis label
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 12px Arial';
+    ctx.save();
+    ctx.translate(15, padding.top + chartHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('PPT (Points Per Tick)', 0, 0);
+    ctx.restore();
+
+    // Add mouse move listener for tooltip
+    canvas.onmousemove = (e) => showPPTTooltip(e, canvas, timeline, teamNames, currentPPT, padding, xStep);
+    canvas.onmouseleave = () => hidePPTTooltip();
+}
+
+function showPPTTooltip(e, canvas, timeline, teamNames, currentPPT, padding, xStep) {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const points = canvas.chartPoints;
+    if (!points) return;
+
+    // Check all points to see if mouse is near any
+    let nearestPoint = null;
+    let nearestDistance = Infinity;
+    let nearestTeam = null;
+
+    const checkPoints = (teamPoints, teamName, color) => {
+        teamPoints.forEach(point => {
+            if (point.ppt > 0) {
+                const distance = Math.sqrt(
+                    Math.pow(mouseX - point.x, 2) +
+                    Math.pow(mouseY - point.y, 2)
+                );
+
+                if (distance < 10 && distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestPoint = point;
+                    nearestTeam = { name: teamName, color: color };
+                }
+            }
+        });
+    };
+
+    checkPoints(points.red, teamNames?.red || 'Red Team', '#ff6b6b');
+    checkPoints(points.green, teamNames?.green || 'Green Team', '#6bff6b');
+    checkPoints(points.blue, teamNames?.blue || 'Blue Team', '#6b6bff');
+
+    if (!nearestPoint) {
+        hidePPTTooltip();
+        return;
+    }
+
+    const bucket = timeline[nearestPoint.index];
+
+    // Create or update tooltip
+    let tooltip = document.getElementById('ppt-tooltip');
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'ppt-tooltip';
+        tooltip.style.position = 'absolute';
+        tooltip.style.background = 'rgba(0, 0, 0, 0.9)';
+        tooltip.style.color = '#fff';
+        tooltip.style.padding = '10px';
+        tooltip.style.borderRadius = '5px';
+        tooltip.style.fontSize = '12px';
+        tooltip.style.pointerEvents = 'none';
+        tooltip.style.zIndex = '1000';
+        tooltip.style.border = '1px solid #d4af37';
+        tooltip.style.minWidth = '150px';
+        tooltip.style.whiteSpace = 'nowrap';
+        canvas.parentElement.appendChild(tooltip);
+    }
+
+    // Calculate time for this bucket
+    const now = new Date();
+    let time;
+    if (bucket.timestamp) {
+        time = new Date(bucket.timestamp);
+    } else {
+        time = new Date(now.getTime() - bucket.minutes_ago * 60000);
+    }
+
+    // Format time label
+    let timeLabel;
+    if (timeline.length > 48) {
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayName = dayNames[time.getDay()];
+        timeLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()} ${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    } else {
+        timeLabel = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    }
+
+    tooltip.innerHTML = `
+        <div style="border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 5px;">
+            <strong>${timeLabel}</strong>
+        </div>
+        <div style="color: ${nearestTeam.color}; font-weight: bold;">
+            ${nearestTeam.name}
+        </div>
+        <div>PPT: <strong>${nearestPoint.ppt.toFixed(0)}</strong></div>
+        <div style="margin-top: 5px; font-size: 10px; color: #888;">
+            ${nearestPoint.ppt * 12} pts/hour
+        </div>
+    `;
+
+    // Position tooltip near the point
+    tooltip.style.left = `${e.clientX - rect.left + 15}px`;
+    tooltip.style.top = `${e.clientY - rect.top - 30}px`;
+    tooltip.style.display = 'block';
+}
+
+function hidePPTTooltip() {
+    const tooltip = document.getElementById('ppt-tooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
+}
+
+function setPPTTimeWindow(window) {
+    pptTimeWindow = window;
+
+    // Update button states
+    document.querySelectorAll('[id^="ppt-window-"]').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.getElementById(`ppt-window-${window}`).classList.add('active');
+
+    // Reload chart with new window
+    updatePPTTimeline();
+}
+
+// Helper function to apply team color to elements
+function applyTeamColor(elementId, color) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.color = color;
     }
 }
 

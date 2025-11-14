@@ -8,6 +8,7 @@ import os
 import json
 import requests
 import time
+import logging
 from typing import Any, Dict, List, Optional, Union
 from tabulate import tabulate
 from colorama import Fore, Style, init
@@ -20,6 +21,9 @@ init(autoreset=True)
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logger = logging.getLogger('GW2API')
 
 # Simple in-memory cache with TTL
 class SimpleCache:
@@ -94,29 +98,33 @@ class GW2API:
         try:
             response = self.session.get(url, params=params, timeout=timeout)
             elapsed = time.time() - start
-            print(f"[GW2API] {endpoint} took {elapsed:.2f}s")
+            logger.debug(f"{endpoint} took {elapsed:.2f}s")
             response.raise_for_status()
             data = response.json()
-            
+
             # Cache successful responses
             if use_cache:
                 _api_cache.set(cache_key, data)
-            
+
             return data
         except requests.Timeout:
             elapsed = time.time() - start
-            print(f"[GW2API] {endpoint} TIMEOUT after {elapsed:.2f}s")
+            logger.warning(f"{endpoint} TIMEOUT after {elapsed:.2f}s")
             raise
         except Exception as e:
             elapsed = time.time() - start
-            print(f"[GW2API] {endpoint} ERROR after {elapsed:.2f}s: {e}")
+            logger.error(f"{endpoint} ERROR after {elapsed:.2f}s: {e}")
             raise
     
     # Account Endpoints
     def get_account(self) -> Dict:
         """Get basic account information."""
         return self._request('account')
-    
+
+    def get_account_wvw(self) -> Dict:
+        """Get account WvW information including team_id."""
+        return self._request('account/wvw')
+
     def get_account_achievements(self) -> List[Dict]:
         """Get account achievement progress."""
         return self._request('account/achievements')
@@ -270,15 +278,15 @@ class GW2API:
                 response.raise_for_status()
                 data = response.json()
                 _api_cache.set(cache_key, data)
-                print(f"[GW2API] guild/{guild_id[:8]} took {elapsed:.2f}s")
+                logger.debug(f"guild/{guild_id[:8]} took {elapsed:.2f}s")
                 return data
             except requests.Timeout:
                 elapsed = time.time() - start
-                print(f"[GW2API] guild/{guild_id[:8]} TIMEOUT after {elapsed:.2f}s")
+                logger.warning(f"guild/{guild_id[:8]} TIMEOUT after {elapsed:.2f}s")
                 raise
             except Exception as e:
                 elapsed = time.time() - start
-                print(f"[GW2API] guild/{guild_id[:8]} ERROR after {elapsed:.2f}s: {e}")
+                logger.debug(f"guild/{guild_id[:8]} ERROR after {elapsed:.2f}s: {e}")
                 raise
         else:
             return self._request(f'guild/{guild_id}', timeout=timeout)
@@ -305,9 +313,9 @@ class GW2API:
             except Exception as e:
                 # Skip guilds that can't be fetched
                 if '404' not in str(e):  # Only warn for non-404 errors
-                    print(f"Warning: Could not fetch guild {guild_id[:8]}: {e}")
+                    logger.warning(f"Could not fetch guild {guild_id[:8]}: {e}")
                 return None
-        
+
         # Fetch in parallel
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_id = {executor.submit(fetch_one, gid): gid for gid in guild_ids}
@@ -315,9 +323,9 @@ class GW2API:
                 result = future.result()
                 if result:
                     guilds.append(result)
-        
+
         elapsed = time.time() - start_total
-        print(f"[GW2API] Fetched {len(guilds)}/{len(guild_ids)} guilds in {elapsed:.2f}s (parallel)")
+        logger.debug(f"Fetched {len(guilds)}/{len(guild_ids)} guilds in {elapsed:.2f}s (parallel)")
         return guilds
     
     # Generic endpoint access
