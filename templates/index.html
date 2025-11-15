@@ -81,7 +81,10 @@
                 
                 <!-- WvW Match Overview -->
                 <div class="wvw-match-overview">
-                    <h3>📊 Current Matchup</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3>📊 Current Matchup</h3>
+                        <div id="tier-badge" class="tier-badge" style="display: none;"></div>
+                    </div>
                     <div id="match-overview-content">
                         <p style="text-align: center; opacity: 0.6;">Click "Reload Match Data" to load matchup details</p>
                     </div>
@@ -390,20 +393,60 @@
             <!-- Trading Post Tab -->
             <div id="trading" class="tab-content">
                 <h2>Trading Post</h2>
-                <div class="query-form">
-                    <label>Item IDs (comma-separated):</label>
-                    <div class="input-group">
-                        <input type="text" id="item-ids" placeholder="e.g., 19721, 24277, 19976" class="input-text">
-                        <button onclick="loadTradingPost()" class="btn btn-primary">Get Prices</button>
-                    </div>
-                    <div class="preset-items">
-                        <p>Common items:</p>
-                        <button onclick="setItemIds('19721')" class="btn btn-small">Ecto</button>
-                        <button onclick="setItemIds('24277')" class="btn btn-small">Mystic Coin</button>
-                        <button onclick="setItemIds('19976')" class="btn btn-small">T6 Blood</button>
-                        <button onclick="setItemIds('19721,24277,19976')" class="btn btn-small">All Three</button>
+
+                <!-- Transaction Tabs -->
+                <div class="tp-tabs" style="margin-bottom: 20px;">
+                    <button class="tp-tab active" onclick="switchTPView('prices')">🔍 Price Lookup</button>
+                    <button class="tp-tab" onclick="switchTPView('selling')">📤 Selling</button>
+                    <button class="tp-tab" onclick="switchTPView('sold')">✅ Sold</button>
+                    <button class="tp-tab" onclick="switchTPView('buying')">📥 Buying</button>
+                    <button class="tp-tab" onclick="switchTPView('bought')">✅ Bought</button>
+                </div>
+
+                <!-- Price Lookup View -->
+                <div id="tp-view-prices" class="tp-view active">
+                    <div class="query-form">
+                        <label>Search by Item Name:</label>
+                        <div class="input-group">
+                            <input type="text" id="item-search" placeholder="Type item name (e.g., 'ecto', 'mystic coin')" class="input-text" oninput="searchItems(this.value)">
+                        </div>
+                        <div id="item-search-results" class="search-results"></div>
+
+                        <label style="margin-top: 20px;">Or Item IDs (comma-separated):</label>
+                        <div class="input-group">
+                            <input type="text" id="item-ids" placeholder="e.g., 19721, 24277, 19976" class="input-text">
+                            <button onclick="loadTradingPost()" class="btn btn-primary">Get Prices</button>
+                        </div>
+                        <div class="preset-items">
+                            <p>Common items:</p>
+                            <button onclick="setItemIds('19721')" class="btn btn-small">Glob of Ectoplasm</button>
+                            <button onclick="setItemIds('24277')" class="btn btn-small">Mystic Coin</button>
+                            <button onclick="setItemIds('19976')" class="btn btn-small">T6 Blood</button>
+                            <button onclick="setItemIds('19721,24277,19976')" class="btn btn-small">All Three</button>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Selling View -->
+                <div id="tp-view-selling" class="tp-view">
+                    <button onclick="loadTPTransactions('current-sells')" class="btn btn-primary">Load Current Sell Listings</button>
+                </div>
+
+                <!-- Sold View -->
+                <div id="tp-view-sold" class="tp-view">
+                    <button onclick="loadTPTransactions('history-sells')" class="btn btn-primary">Load Sell History (90 days)</button>
+                </div>
+
+                <!-- Buying View -->
+                <div id="tp-view-buying" class="tp-view">
+                    <button onclick="loadTPTransactions('current-buys')" class="btn btn-primary">Load Current Buy Orders</button>
+                </div>
+
+                <!-- Bought View -->
+                <div id="tp-view-bought" class="tp-view">
+                    <button onclick="loadTPTransactions('history-buys')" class="btn btn-primary">Load Buy History (90 days)</button>
+                </div>
+
                 <div id="trading-result" class="result-container"></div>
             </div>
 

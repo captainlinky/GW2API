@@ -98,17 +98,39 @@ class WvWTracker:
     def update_match(self, match_data: Dict, world_id: int = None):
         """
         Update tracked data with new match information.
-        
+
         Args:
             match_data: Match data from API (already enriched with guild info)
             world_id: Optional world ID if tracking specific world
         """
         match_id = match_data['id']
         current_time = datetime.utcnow().isoformat()
-        
+
         # Load existing data
         tracked = self._load_match_data()
-        
+
+        # Check if we have a different match that has ended
+        # If so, clean it up immediately to prevent showing old data
+        cleanup_performed = False
+        for existing_match_id in list(tracked.keys()):
+            if existing_match_id != match_id:
+                existing_match = tracked[existing_match_id]
+                if existing_match.get('end_time'):
+                    try:
+                        end_time = datetime.fromisoformat(existing_match['end_time'].replace('Z', '+00:00'))
+                        end_time_naive = end_time.replace(tzinfo=None)
+                        # If the match has ended, remove it
+                        if datetime.utcnow() >= end_time_naive:
+                            logger.info(f"Cleaning up expired match {existing_match_id} (ended at {existing_match['end_time']})")
+                            del tracked[existing_match_id]
+                            cleanup_performed = True
+                    except (ValueError, AttributeError):
+                        pass
+
+        # Save immediately after cleanup to persist changes
+        if cleanup_performed:
+            self._save_match_data(tracked)
+
         # Cleanup old matches (older than 7 days to match matchup duration) periodically
         # Only cleanup if we have more than 2 tracked matches
         if len(tracked) > 2:

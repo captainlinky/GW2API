@@ -217,6 +217,22 @@ class GW2API:
     def get_tp_listings(self, item_ids: List[int]) -> List[Dict]:
         """Get Trading Post listings (buy/sell orders)."""
         return self._request('commerce/listings', params={'ids': ','.join(map(str, item_ids))})
+
+    def get_tp_transactions_current_buys(self) -> List[Dict]:
+        """Get current buy orders on Trading Post."""
+        return self._request('commerce/transactions/current/buys')
+
+    def get_tp_transactions_current_sells(self) -> List[Dict]:
+        """Get current sell listings on Trading Post."""
+        return self._request('commerce/transactions/current/sells')
+
+    def get_tp_transactions_history_buys(self) -> List[Dict]:
+        """Get buy transaction history (past 90 days)."""
+        return self._request('commerce/transactions/history/buys')
+
+    def get_tp_transactions_history_sells(self) -> List[Dict]:
+        """Get sell transaction history (past 90 days)."""
+        return self._request('commerce/transactions/history/sells')
     
     # PvP Endpoints
     def get_pvp_stats(self) -> Dict:

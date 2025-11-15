@@ -72,6 +72,91 @@ body {
     font-size: 0.9em;
 }
 
+.tier-badge {
+    background: linear-gradient(135deg, var(--primary-color) 0%, rgba(212, 175, 55, 0.8) 100%);
+    color: #1a1a1a;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.95em;
+    font-weight: bold;
+    box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
+    display: none;
+}
+
+/* Trading Post Tabs */
+.tp-tabs {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.tp-tab {
+    background: var(--card-bg);
+    color: var(--text-color);
+    border: 2px solid var(--border-color);
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.95em;
+    transition: all 0.3s ease;
+}
+
+.tp-tab:hover {
+    background: var(--border-color);
+    border-color: var(--primary-color);
+}
+
+.tp-tab.active {
+    background: var(--primary-color);
+    color: #1a1a1a;
+    border-color: var(--primary-color);
+}
+
+.tp-view {
+    display: none;
+}
+
+.tp-view.active {
+    display: block;
+}
+
+.search-results {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 10px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: none;
+}
+
+.search-results.active {
+    display: block;
+}
+
+.search-result-item {
+    padding: 10px 15px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.search-result-item:hover {
+    background: var(--border-color);
+}
+
+.search-result-item img {
+    width: 32px;
+    height: 32px;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
 /* Navigation */
 .nav-tabs {
     display: flex;

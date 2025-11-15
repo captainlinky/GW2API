@@ -858,32 +858,32 @@ def get_materials():
 def get_tp_prices():
     """Get trading post prices."""
     item_ids = request.args.get('ids', '')
-    
+
     if not item_ids:
         return jsonify({
             'status': 'error',
             'message': 'No item IDs provided'
         }), 400
-    
+
     try:
         ids = [int(x.strip()) for x in item_ids.split(',')]
         client = GW2API()
-        
+
         prices = client.get_tp_prices(ids)
         items = client.get_items(ids)
-        
+
         # Create item name map
         item_map = {item['id']: item for item in items}
-        
+
         # Enrich price data
         enriched = []
         for price in prices:
             item_id = price['id']
             item_info = item_map.get(item_id, {})
-            
+
             buy_price = price['buys']['unit_price']
             sell_price = price['sells']['unit_price']
-            
+
             enriched.append({
                 'id': item_id,
                 'name': item_info.get('name', f'Item {item_id}'),
@@ -897,10 +897,82 @@ def get_tp_prices():
                 'buy_formatted': format_currency(buy_price),
                 'sell_formatted': format_currency(sell_price)
             })
-        
+
         return jsonify({
             'status': 'success',
             'data': enriched
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 400
+
+
+@app.route('/api/tp/transactions/<transaction_type>')
+def get_tp_transactions(transaction_type):
+    """
+    Get trading post transactions.
+
+    Args:
+        transaction_type: One of 'current-buys', 'current-sells', 'history-buys', 'history-sells'
+    """
+    try:
+        client = GW2API()
+
+        # Get the appropriate transaction data
+        if transaction_type == 'current-buys':
+            transactions = client.get_tp_transactions_current_buys()
+        elif transaction_type == 'current-sells':
+            transactions = client.get_tp_transactions_current_sells()
+        elif transaction_type == 'history-buys':
+            transactions = client.get_tp_transactions_history_buys()
+        elif transaction_type == 'history-sells':
+            transactions = client.get_tp_transactions_history_sells()
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Invalid transaction type: {transaction_type}'
+            }), 400
+
+        # Collect unique item IDs
+        item_ids = list(set(t['item_id'] for t in transactions))
+
+        # Get item details
+        item_map = {}
+        if item_ids:
+            # Fetch in batches of 200 (API limit)
+            for i in range(0, len(item_ids), 200):
+                batch = item_ids[i:i+200]
+                items = client.get_items(batch)
+                for item in items:
+                    item_map[item['id']] = item
+
+        # Enrich transaction data
+        enriched = []
+        for transaction in transactions:
+            item_id = transaction['item_id']
+            item_info = item_map.get(item_id, {})
+
+            enriched_transaction = {
+                'id': transaction.get('id'),
+                'item_id': item_id,
+                'item_name': item_info.get('name', f'Item {item_id}'),
+                'icon': item_info.get('icon', ''),
+                'rarity': item_info.get('rarity', 'Unknown'),
+                'price': transaction.get('price'),
+                'price_formatted': format_currency(transaction.get('price', 0)),
+                'quantity': transaction.get('quantity'),
+                'created': transaction.get('created'),
+                'purchased': transaction.get('purchased'),  # Only in history
+            }
+
+            enriched.append(enriched_transaction)
+
+        return jsonify({
+            'status': 'success',
+            'data': enriched,
+            'count': len(enriched)
         })
     except Exception as e:
         return jsonify({
@@ -1196,9 +1268,23 @@ def get_wvw_stats(world_id):
                 else:
                     team_names[color] = get_alliance_display_name(main_world, world_name)
 
+        # Extract tier from match ID (format: "region-tier", e.g., "1-2" = NA Tier 2)
+        match_id_str = match['id']
+        tier_info = {'tier': None, 'region': None}
+        try:
+            parts = match_id_str.split('-')
+            if len(parts) == 2:
+                region_id = int(parts[0])
+                tier_num = int(parts[1])
+                tier_info['tier'] = tier_num
+                tier_info['region'] = 'NA' if region_id == 1 else 'EU' if region_id == 2 else f'Region {region_id}'
+        except (ValueError, IndexError):
+            pass
+
         return jsonify({
             'status': 'success',
             'match_id': match['id'],
+            'tier_info': tier_info,
             'team_names': team_names,
             'ppt': ppt,
             'territory_control': territory_control,
@@ -1417,7 +1503,35 @@ def get_tracked_guilds(match_id):
     try:
         guilds_by_team = wvw_tracker.get_all_guilds_sorted(match_id)
         match_summary = wvw_tracker.get_match_summary(match_id)
-        
+
+        # Check if this match has ended
+        is_expired = False
+        if match_summary and match_summary.get('end_time'):
+            try:
+                end_time = datetime.fromisoformat(match_summary['end_time'].replace('Z', '+00:00'))
+                end_time_naive = end_time.replace(tzinfo=None)
+                is_expired = datetime.utcnow() >= end_time_naive
+            except (ValueError, AttributeError):
+                pass
+
+        # If match has expired, try to get fresh team names from current match API
+        # and mark old guild data for cleanup
+        if is_expired:
+            logger.info(f"Match {match_id} has expired. Fetching current match data...")
+            try:
+                # Clean up this expired match
+                removed = wvw_tracker.cleanup_old_matches(days=0)  # Clean up immediately
+                if removed > 0:
+                    logger.info(f"Cleaned up {removed} expired match(es)")
+                    # Return empty data since match is expired
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'Match {match_id} has ended. Please reload match data to see current matchup.',
+                        'is_expired': True
+                    }), 410  # 410 Gone - resource no longer available
+            except Exception as cleanup_err:
+                logger.error(f"Error cleaning up expired match: {cleanup_err}")
+
         return jsonify({
             'status': 'success',
             'match_info': {
@@ -1426,6 +1540,7 @@ def get_tracked_guilds(match_id):
                 'end_time': match_summary.get('end_time'),
                 'first_seen': match_summary.get('first_seen'),
                 'last_updated': match_summary.get('last_updated'),
+                'is_expired': is_expired,
                 'teams': {
                     color: {
                         'main_world': match_summary['teams'][color].get('main_world'),

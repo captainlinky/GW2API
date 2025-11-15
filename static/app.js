@@ -109,6 +109,15 @@ async function updateEnhancedWvWStats() {
         const data = await response.json();
 
         if (data.status === 'success') {
+            // Update tier badge
+            if (data.tier_info && data.tier_info.tier) {
+                const tierBadge = document.getElementById('tier-badge');
+                if (tierBadge) {
+                    tierBadge.textContent = `${data.tier_info.region} Tier ${data.tier_info.tier}`;
+                    tierBadge.style.display = 'inline-block';
+                }
+            }
+
             // Update PPT
             document.getElementById('ppt-red').textContent = data.ppt.red || '--';
             document.getElementById('ppt-green').textContent = data.ppt.green || '--';
@@ -380,25 +389,50 @@ async function updateTeamBars() {
             if (myWorldMatch && myWorldMatch.match_id) {
                 const trackedResponse = await fetch(`/api/wvw/tracked-guilds/${myWorldMatch.match_id}`);
                 const trackedData = await trackedResponse.json();
-                
+
+                // Check if match has expired (410 Gone status)
+                if (trackedResponse.status === 410 || (trackedData.is_expired || trackedData.status === 'error' && trackedData.is_expired)) {
+                    console.log('Match has expired, clearing old guild data');
+                    // Clear old guild data
+                    window.trackedGuildData = null;
+
+                    // Reset team bars to show 0 guilds
+                    ['red', 'green', 'blue'].forEach(color => {
+                        const label = document.getElementById(`${color}-team-label`);
+                        if (label) {
+                            label.textContent = `${color === 'red' ? '🔴' : color === 'green' ? '🟢' : '🔵'} ${color.charAt(0).toUpperCase() + color.slice(1)} Team`;
+                        }
+                        const bar = document.getElementById(`${color}-bar`);
+                        if (bar) {
+                            bar.style.width = '0%';
+                            bar.textContent = '';
+                        }
+                        const count = document.getElementById(`${color}-guild-count`);
+                        if (count) {
+                            count.textContent = '0 guilds';
+                        }
+                    });
+                    return; // Exit early, don't try to display old data
+                }
+
                 if (trackedData.status === 'success' && trackedData.guilds && trackedData.match_info) {
                     // Store guild data globally for dropdown access
                     window.trackedGuildData = trackedData;
-                    
+
                     // Count unique guilds per team
                     const redCount = trackedData.guilds.red ? trackedData.guilds.red.length : 0;
                     const greenCount = trackedData.guilds.green ? trackedData.guilds.green.length : 0;
                     const blueCount = trackedData.guilds.blue ? trackedData.guilds.blue.length : 0;
                     const total = redCount + greenCount + blueCount;
-                    
+
                     // Get world display names from match_info (these are the in-game WvW instance names)
-                    const redWorld = trackedData.match_info.teams.red.display_name || 
+                    const redWorld = trackedData.match_info.teams.red.display_name ||
                                     trackedData.match_info.teams.red.main_world || 'Red Team';
-                    const greenWorld = trackedData.match_info.teams.green.display_name || 
+                    const greenWorld = trackedData.match_info.teams.green.display_name ||
                                       trackedData.match_info.teams.green.main_world || 'Green Team';
-                    const blueWorld = trackedData.match_info.teams.blue.display_name || 
+                    const blueWorld = trackedData.match_info.teams.blue.display_name ||
                                      trackedData.match_info.teams.blue.main_world || 'Blue Team';
-                    
+
                     // Update red team
                     const redPercent = total > 0 ? (redCount / total) * 100 : 0;
                     const redLabel = document.getElementById('red-team-label');
@@ -408,7 +442,7 @@ async function updateTeamBars() {
                     document.getElementById('red-bar').style.width = `${redPercent}%`;
                     document.getElementById('red-bar').textContent = redCount > 0 ? redCount : '';
                     document.getElementById('red-guild-count').textContent = `${redCount} guild${redCount !== 1 ? 's' : ''}`;
-                    
+
                     // Update green team
                     const greenPercent = total > 0 ? (greenCount / total) * 100 : 0;
                     const greenLabel = document.getElementById('green-team-label');
@@ -418,7 +452,7 @@ async function updateTeamBars() {
                     document.getElementById('green-bar').style.width = `${greenPercent}%`;
                     document.getElementById('green-bar').textContent = greenCount > 0 ? greenCount : '';
                     document.getElementById('green-guild-count').textContent = `${greenCount} guild${greenCount !== 1 ? 's' : ''}`;
-                    
+
                     // Update blue team
                     const bluePercent = total > 0 ? (blueCount / total) * 100 : 0;
                     const blueLabel = document.getElementById('blue-team-label');
@@ -1710,7 +1744,20 @@ async function loadTrackedGuildsQuick() {
         // Fetch tracked guilds for this match
         const guildsResponse = await fetch(`/api/wvw/tracked-guilds/${matchId}`);
         const guildsData = await guildsResponse.json();
-        
+
+        // Check if match has expired
+        if (guildsResponse.status === 410 || (guildsData.is_expired || guildsData.status === 'error' && guildsData.is_expired)) {
+            resultDiv.innerHTML = `
+                <div class="info-box" style="background: rgba(255, 165, 0, 0.1); border-color: orange;">
+                    <h3 style="color: orange;">⚠️ Match Has Ended</h3>
+                    <p>${guildsData.message || 'The previous match has ended and guild tracking data has been cleared.'}</p>
+                    <p>Click <strong>Reload Match Data</strong> above to load the current matchup and start tracking new guilds.</p>
+                    <button onclick="reloadMatchData()" class="btn btn-primary" style="margin-top: 10px;">🔄 Reload Match Data</button>
+                </div>
+            `;
+            return;
+        }
+
         if (guildsData.status === 'success') {
             renderTrackedGuildsInDashboard(guildsData, resultDiv);
         } else {
@@ -2299,6 +2346,190 @@ function quickQuery(ids) {
     switchTab('trading');
     setItemIds(ids);
     loadTradingPost();
+}
+
+// Trading Post view switching
+function switchTPView(view) {
+    // Update tabs
+    document.querySelectorAll('.tp-tab').forEach(tab => tab.classList.remove('active'));
+    event.target.classList.add('active');
+
+    // Update views
+    document.querySelectorAll('.tp-view').forEach(v => v.classList.remove('active'));
+    document.getElementById(`tp-view-${view}`).classList.add('active');
+
+    // Clear results when switching views
+    document.getElementById('trading-result').innerHTML = '';
+}
+
+// Load trading post transactions
+async function loadTPTransactions(transactionType) {
+    const resultDiv = document.getElementById('trading-result');
+    resultDiv.innerHTML = '<div class="loading"></div> Loading transactions...';
+
+    try {
+        const response = await fetch(`/api/tp/transactions/${transactionType}`);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            if (data.count === 0) {
+                resultDiv.innerHTML = '<div class="info-box">No transactions found.</div>';
+                return;
+            }
+
+            const typeLabels = {
+                'current-sells': 'Current Sell Listings',
+                'current-buys': 'Current Buy Orders',
+                'history-sells': 'Sold Items (Last 90 Days)',
+                'history-buys': 'Bought Items (Last 90 Days)'
+            };
+
+            let html = `<h3>${typeLabels[transactionType]} (${data.count})</h3>`;
+            html += '<table class="data-table"><thead><tr>';
+            html += '<th>Item</th><th>Quantity</th><th>Price (each)</th><th>Total</th>';
+
+            if (transactionType.startsWith('history')) {
+                html += '<th>Created</th><th>Completed</th>';
+            } else {
+                html += '<th>Created</th>';
+            }
+
+            html += '</tr></thead><tbody>';
+
+            data.data.forEach(transaction => {
+                const total = transaction.price * transaction.quantity;
+                const totalFormatted = formatCurrency(total);
+
+                html += `<tr>
+                    <td>
+                        ${transaction.icon ? `<img src="${transaction.icon}" width="24" height="24" style="vertical-align: middle; margin-right: 5px;">` : ''}
+                        ${transaction.item_name}
+                    </td>
+                    <td>${transaction.quantity}</td>
+                    <td>${transaction.price_formatted}</td>
+                    <td>${totalFormatted}</td>`;
+
+                if (transactionType.startsWith('history')) {
+                    html += `<td>${formatDate(transaction.created)}</td>
+                             <td>${formatDate(transaction.purchased)}</td>`;
+                } else {
+                    html += `<td>${formatDate(transaction.created)}</td>`;
+                }
+
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            resultDiv.innerHTML = html;
+        } else {
+            resultDiv.innerHTML = `<div class="status-message status-error">Error: ${data.message}</div>`;
+        }
+    } catch (error) {
+        console.error('Error loading transactions:', error);
+        resultDiv.innerHTML = `<div class="status-message status-error">Error: ${error.message}</div>`;
+    }
+}
+
+// Item search cache
+let itemSearchCache = null;
+let itemSearchTimeout = null;
+
+// Search items by name
+async function searchItems(query) {
+    const resultsDiv = document.getElementById('item-search-results');
+
+    if (!query || query.length < 2) {
+        resultsDiv.classList.remove('active');
+        return;
+    }
+
+    // Clear previous timeout
+    if (itemSearchTimeout) {
+        clearTimeout(itemSearchTimeout);
+    }
+
+    // Debounce the search
+    itemSearchTimeout = setTimeout(async () => {
+        try {
+            // Build search cache on first search (common tradeable items)
+            if (!itemSearchCache) {
+                resultsDiv.innerHTML = '<div style="padding: 15px;">Loading item database...</div>';
+                resultsDiv.classList.add('active');
+
+                // Fetch commonly traded items (this list can be expanded)
+                const commonItems = [
+                    19721, 24277, 19976, 24295, 24358, 24289, 24300, 24277,
+                    19684, 19685, 19686, 19687, 19688, 19689, 19690, 19691, // T6 materials
+                    24341, 24342, 24343, 24344, 24345, 24346, // Charged items
+                    46731, 46732, 46733, 46734, 46735, 46736, // Obsidian Shards, etc
+                    19721, 19724, 19725, 19726, 19727, 19728, // Essences
+                    12138, 12141, 12142, 12143, 12144, 12145, 12146, 12147, // Cores
+                    24357, 24351, 24350, 24356, 24289, 24300, // Lodestones
+                    19685, 19684, 19686, 19687, // More T6
+                    19976, 19977, 24277, 24295, // Mystic materials
+                    68063, 77482, 76491, 75762 // Legendary materials
+                ];
+
+                const response = await fetch(`/api/items?ids=${commonItems.join(',')}`);
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    itemSearchCache = data.data;
+                } else {
+                    resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;">Error loading items</div>';
+                    return;
+                }
+            }
+
+            // Filter items by query
+            const lowerQuery = query.toLowerCase();
+            const matches = itemSearchCache.filter(item =>
+                item.name.toLowerCase().includes(lowerQuery)
+            ).slice(0, 10); // Limit to 10 results
+
+            if (matches.length === 0) {
+                resultsDiv.innerHTML = '<div style="padding: 15px; opacity: 0.6;">No matches found. Try searching for common items like "ecto" or "mystic".</div>';
+            } else {
+                let html = '';
+                matches.forEach(item => {
+                    html += `
+                        <div class="search-result-item" onclick="selectItem(${item.id}, '${item.name.replace(/'/g, "\\'")}')">
+                            ${item.icon ? `<img src="${item.icon}" alt="${item.name}">` : ''}
+                            <div>${item.name}</div>
+                        </div>
+                    `;
+                });
+                resultsDiv.innerHTML = html;
+            }
+
+            resultsDiv.classList.add('active');
+        } catch (error) {
+            console.error('Error searching items:', error);
+            resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;">Search error</div>';
+        }
+    }, 300); // 300ms debounce
+}
+
+function selectItem(itemId, itemName) {
+    document.getElementById('item-ids').value = itemId;
+    document.getElementById('item-search').value = itemName;
+    document.getElementById('item-search-results').classList.remove('active');
+    loadTradingPost();
+}
+
+// Helper function to format dates
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString();
+}
+
+// Helper function to format currency
+function formatCurrency(copper) {
+    const gold = Math.floor(copper / 10000);
+    const silver = Math.floor((copper % 10000) / 100);
+    const copperRem = copper % 100;
+    return `${gold}g ${silver}s ${copperRem}c`;
 }
 
 // WvW Functions
