@@ -4,6 +4,7 @@ let mapObjectives = {};
 let objectivesData = {};
 let matchData = null;
 let autoRefreshInterval = null;
+let currentMapsInterval = 30; // default 30 seconds
 
 // Map dimensions and scaling (use high-res square canvas for all)
 const MAP_CONFIG = {
@@ -55,8 +56,20 @@ async function initWvWMaps() {
         // Render selector and first map now that data is loaded
         renderMapSelector();
         await renderMap(currentMapType);
-        // Auto-refresh every 30 seconds
-        startAutoRefresh();
+
+        // Load polling config and start auto-refresh
+        try {
+            const response = await fetch('/api/polling-config');
+            const data = await response.json();
+            if (data.status === 'success') {
+                startAutoRefresh(data.config.maps_interval);
+            } else {
+                startAutoRefresh(); // Use default
+            }
+        } catch (error) {
+            console.error('Failed to load polling config for maps:', error);
+            startAutoRefresh(); // Use default
+        }
         // Update button
         if (loadBtn) {
             loadBtn.innerHTML = '✅ Maps Loaded';
@@ -376,18 +389,27 @@ function showObjectiveDetails(objectiveId) {
 }
 
 // Auto-refresh functionality
-function startAutoRefresh() {
+function startAutoRefresh(intervalSeconds = null) {
     // Clear existing interval
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
     }
-    
-    // Refresh every 30 seconds
+
+    // Use provided interval or fall back to current/default
+    if (intervalSeconds !== null) {
+        currentMapsInterval = intervalSeconds;
+    }
+
+    const intervalMs = currentMapsInterval * 1000;
+
+    // Refresh at configured interval
     autoRefreshInterval = setInterval(async () => {
         await loadCurrentMatch();
         renderMap(currentMapType);
         console.log('Map data refreshed');
-    }, 30000);
+    }, intervalMs);
+
+    console.log(`Maps auto-refresh started with ${currentMapsInterval}s interval`);
 }
 
 function stopAutoRefresh() {

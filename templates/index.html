@@ -476,7 +476,8 @@
             <!-- Settings Tab -->
             <div id="settings" class="tab-content">
                 <h2>Settings</h2>
-                
+                <div id="settings-result"></div>
+
                 <div class="settings-section">
                     <h3>API Key Configuration</h3>
                     <div id="current-key-status"></div>
@@ -502,7 +503,35 @@
                         </div>
                     </div>
                 </div>
-                
+
+                <div class="settings-section">
+                    <h3>Polling Frequency</h3>
+                    <div id="polling-config-status"></div>
+
+                    <div class="query-form">
+                        <div class="form-group">
+                            <label for="dashboard-interval">Dashboard Refresh Interval (seconds):</label>
+                            <input type="number" id="dashboard-interval" min="5" max="300" value="60" class="input-text">
+                            <small>How often to refresh dashboard statistics (5-300 seconds, default: 60)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="maps-interval">Interactive Maps Refresh Interval (seconds):</label>
+                            <input type="number" id="maps-interval" min="5" max="300" value="30" class="input-text">
+                            <small>How often to refresh map objectives (5-300 seconds, default: 30)</small>
+                        </div>
+
+                        <div class="button-group">
+                            <button onclick="savePollingConfig()" class="btn btn-primary">Save Settings</button>
+                            <button onclick="resetPollingDefaults()" class="btn btn-secondary">Reset to Defaults</button>
+                        </div>
+
+                        <div class="info-box">
+                            <p><strong>Note:</strong> Lower intervals mean more frequent updates but may increase server load and network traffic. Changes take effect after saving and refreshing the page.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="settings-section">
                     <h3>About</h3>
                     <p>Guild Wars 2 API Tool - Web Interface</p>

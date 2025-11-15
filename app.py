@@ -579,9 +579,29 @@ def save_api_key(api_key):
     env_file = find_dotenv()
     if not env_file:
         env_file = os.path.join(os.path.dirname(__file__), '.env')
-    
+
     set_key(env_file, 'GW2_API_KEY', api_key)
     os.environ['GW2_API_KEY'] = api_key
+
+
+def get_polling_config():
+    """Get the current polling configuration from environment."""
+    return {
+        'dashboard_interval': int(os.getenv('POLLING_DASHBOARD_INTERVAL', '60')),
+        'maps_interval': int(os.getenv('POLLING_MAPS_INTERVAL', '30'))
+    }
+
+
+def save_polling_config(dashboard_interval, maps_interval):
+    """Save polling configuration to .env file."""
+    env_file = find_dotenv()
+    if not env_file:
+        env_file = os.path.join(os.path.dirname(__file__), '.env')
+
+    set_key(env_file, 'POLLING_DASHBOARD_INTERVAL', str(dashboard_interval))
+    set_key(env_file, 'POLLING_MAPS_INTERVAL', str(maps_interval))
+    os.environ['POLLING_DASHBOARD_INTERVAL'] = str(dashboard_interval)
+    os.environ['POLLING_MAPS_INTERVAL'] = str(maps_interval)
 
 
 def format_response(data, format_type='json'):
@@ -683,15 +703,15 @@ def api_key_management():
             # Read the file and remove the API key line
             with open(env_file, 'r') as f:
                 lines = f.readlines()
-            
+
             with open(env_file, 'w') as f:
                 for line in lines:
                     if not line.startswith('GW2_API_KEY='):
                         f.write(line)
-            
+
             # Clear from environment
             os.environ.pop('GW2_API_KEY', None)
-            
+
             return jsonify({
                 'status': 'success',
                 'message': 'API key deleted successfully'
@@ -701,6 +721,60 @@ def api_key_management():
                 'status': 'success',
                 'message': 'No API key found to delete'
             })
+
+
+@app.route('/api/polling-config', methods=['GET', 'POST'])
+def polling_config_management():
+    """Manage polling configuration."""
+    if request.method == 'GET':
+        config = get_polling_config()
+        return jsonify({
+            'status': 'success',
+            'config': config
+        })
+
+    elif request.method == 'POST':
+        data = request.get_json()
+        dashboard_interval = data.get('dashboard_interval')
+        maps_interval = data.get('maps_interval')
+
+        # Validate intervals
+        if dashboard_interval is None or maps_interval is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'Both dashboard_interval and maps_interval are required'
+            }), 400
+
+        try:
+            dashboard_interval = int(dashboard_interval)
+            maps_interval = int(maps_interval)
+        except ValueError:
+            return jsonify({
+                'status': 'error',
+                'message': 'Intervals must be valid integers'
+            }), 400
+
+        # Validate ranges (minimum 5 seconds, maximum 300 seconds / 5 minutes)
+        if not (5 <= dashboard_interval <= 300):
+            return jsonify({
+                'status': 'error',
+                'message': 'Dashboard interval must be between 5 and 300 seconds'
+            }), 400
+
+        if not (5 <= maps_interval <= 300):
+            return jsonify({
+                'status': 'error',
+                'message': 'Maps interval must be between 5 and 300 seconds'
+            }), 400
+
+        # Save configuration
+        save_polling_config(dashboard_interval, maps_interval)
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Polling configuration saved successfully',
+            'config': get_polling_config()
+        })
 
 
 @app.route('/api/account')

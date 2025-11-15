@@ -1,5 +1,9 @@
 // GW2 API Tool - JavaScript
 
+// Global polling configuration
+let dashboardPollingInterval = null;
+let currentDashboardInterval = 60; // default 60 seconds
+
 // Global data cache to prevent duplicate API calls
 window.GW2Data = {
     matchData: null,
@@ -202,10 +206,58 @@ function startSkirmishCountdown(secondsRemaining, currentSkirmish, totalSkirmish
     skirmishTimerInterval = setInterval(updateDisplay, 1000);
 }
 
+// Start dashboard polling with configurable interval
+function startDashboardPolling(intervalSeconds) {
+    // Clear existing interval if any
+    if (dashboardPollingInterval) {
+        clearInterval(dashboardPollingInterval);
+    }
+
+    currentDashboardInterval = intervalSeconds;
+    const intervalMs = intervalSeconds * 1000;
+
+    // Set up new polling interval
+    dashboardPollingInterval = setInterval(() => {
+        updateDashboardStats();
+        updateTeamBars();
+        updateActivityTimeline();
+        updateKDRTimeline();
+        updatePPTTimeline();
+        updateEnhancedWvWStats();
+    }, intervalMs);
+
+    console.log(`Dashboard polling started with ${intervalSeconds}s interval`);
+}
+
+// Load polling configuration from server
+async function loadPollingConfig() {
+    try {
+        const response = await fetch('/api/polling-config');
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            currentDashboardInterval = data.config.dashboard_interval;
+            return data.config;
+        }
+    } catch (error) {
+        console.error('Failed to load polling config:', error);
+    }
+
+    // Return defaults if fetch fails
+    return {
+        dashboard_interval: 60,
+        maps_interval: 30
+    };
+}
+
 // Initialize
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     setupTabs();
     checkApiStatus();
+
+    // Load polling configuration and start polling
+    const config = await loadPollingConfig();
+
     // Initialize dashboard stats and auto-load match data (this will cache it)
     updateDashboardStats();
     updateTeamBars();
@@ -214,15 +266,11 @@ document.addEventListener('DOMContentLoaded', function() {
     updatePPTTimeline();
     updateEnhancedWvWStats();
 
-    // Refresh stats every 60 seconds
-    setInterval(() => {
-        updateDashboardStats();
-        updateTeamBars();
-        updateActivityTimeline();
-        updateKDRTimeline();
-        updatePPTTimeline();
-        updateEnhancedWvWStats();
-    }, 60000);
+    // Start polling with configured interval
+    startDashboardPolling(config.dashboard_interval);
+
+    // Update settings UI if on settings tab
+    updatePollingConfigUI(config);
 });
 
 // Enhanced Dashboard Functions
@@ -2076,14 +2124,14 @@ async function deleteApiKey() {
     if (!confirm('Are you sure you want to delete your API key? You will need to add a new one to use the tool.')) {
         return;
     }
-    
+
     try {
         const response = await fetch('/api/key', {
             method: 'DELETE'
         });
-        
+
         const data = await response.json();
-        
+
         if (data.status === 'success') {
             showMessage('settings', 'API key deleted successfully. Add a new one to continue using the tool.', 'success');
             checkApiStatus();
@@ -2093,6 +2141,88 @@ async function deleteApiKey() {
     } catch (error) {
         showMessage('settings', 'Error deleting API key: ' + error.message, 'error');
     }
+}
+
+// Polling Configuration Functions
+function updatePollingConfigUI(config) {
+    const dashboardInput = document.getElementById('dashboard-interval');
+    const mapsInput = document.getElementById('maps-interval');
+
+    if (dashboardInput && config.dashboard_interval) {
+        dashboardInput.value = config.dashboard_interval;
+    }
+    if (mapsInput && config.maps_interval) {
+        mapsInput.value = config.maps_interval;
+    }
+
+    // Show current status
+    const statusDiv = document.getElementById('polling-config-status');
+    if (statusDiv) {
+        statusDiv.innerHTML = `<div class="info-box">
+            <p><strong>Current Settings:</strong> Dashboard refreshes every ${config.dashboard_interval} seconds, Maps refresh every ${config.maps_interval} seconds</p>
+        </div>`;
+    }
+}
+
+async function savePollingConfig() {
+    const dashboardInterval = parseInt(document.getElementById('dashboard-interval').value);
+    const mapsInterval = parseInt(document.getElementById('maps-interval').value);
+
+    // Validate inputs
+    if (isNaN(dashboardInterval) || isNaN(mapsInterval)) {
+        showMessage('settings', 'Please enter valid numbers for both intervals', 'error');
+        return;
+    }
+
+    if (dashboardInterval < 5 || dashboardInterval > 300) {
+        showMessage('settings', 'Dashboard interval must be between 5 and 300 seconds', 'error');
+        return;
+    }
+
+    if (mapsInterval < 5 || mapsInterval > 300) {
+        showMessage('settings', 'Maps interval must be between 5 and 300 seconds', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/polling-config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                dashboard_interval: dashboardInterval,
+                maps_interval: mapsInterval
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            showMessage('settings', 'Polling settings saved successfully! Restart polling with new intervals...', 'success');
+
+            // Restart dashboard polling with new interval
+            startDashboardPolling(dashboardInterval);
+
+            // Update maps polling if maps are loaded
+            if (typeof startAutoRefresh === 'function') {
+                startAutoRefresh(mapsInterval);
+            }
+
+            // Update status display
+            updatePollingConfigUI(data.config);
+        } else {
+            showMessage('settings', data.message || 'Error saving polling configuration', 'error');
+        }
+    } catch (error) {
+        showMessage('settings', 'Error saving polling configuration: ' + error.message, 'error');
+    }
+}
+
+function resetPollingDefaults() {
+    document.getElementById('dashboard-interval').value = 60;
+    document.getElementById('maps-interval').value = 30;
+    showMessage('settings', 'Reset to default values. Click "Save Settings" to apply.', 'info');
 }
 
 function toggleKeyVisibility() {
