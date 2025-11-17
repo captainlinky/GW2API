@@ -3337,7 +3337,7 @@ async function renderWarRoomMap(mapType) {
         'BlueHome': { width: 2048, height: 2048, name: 'Blue Borderlands' }
     };
 
-    const config = MAP_CONFIG[mapType];
+    let config = MAP_CONFIG[mapType];
     const mapData = warroomMapObjectives[mapType];
     const objectives = warroomObjectivesData[mapType];
 
@@ -3363,6 +3363,20 @@ async function renderWarRoomMap(mapType) {
                 useProperTransform = true;
                 // Store for debug access
                 warroomMapMeta[mapType] = mapMeta;
+
+                // Adjust canvas aspect ratio to match map_rect
+                const mapRect = mapMeta.map_rect;
+                const mapWidth = mapRect[1][0] - mapRect[0][0];
+                const mapHeight = mapRect[1][1] - mapRect[0][1];
+                const aspectRatio = mapHeight / mapWidth;
+
+                // Keep width at 2048, adjust height to match aspect ratio
+                config = {
+                    ...config,
+                    height: Math.round(config.width * aspectRatio)
+                };
+
+                console.log(`War Room: Adjusted canvas for ${mapType}: ${config.width}x${config.height} (aspect: ${aspectRatio.toFixed(2)}:1)`);
                 console.log(`War Room: Using coordinate transformation for ${mapType}:`, {
                     mapId: candidateMapId,
                     continent_rect: mapMeta.continent_rect,
