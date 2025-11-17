@@ -1590,28 +1590,89 @@ body {
     }
 }
 
-.warroom-events-section {
-    background: var(--card-bg);
+.warroom-events-panel {
+    background: var(--dark-bg);
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+    max-height: 600px;
+    display: flex;
+    flex-direction: column;
 }
 
-.warroom-events-section h3 {
+.warroom-events-panel h4 {
     color: var(--primary-color);
-    font-size: 1.3em;
+    font-size: 1.1em;
 }
 
-.events-feed-container {
-    background: var(--dark-bg);
-    border-radius: 6px;
-    padding: 15px;
-    margin-top: 15px;
+.warroom-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    padding: 12px;
+    color: #fff;
+    font-size: 0.9em;
+    max-width: 300px;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.warroom-tooltip h5 {
+    margin: 0 0 8px 0;
+    font-size: 1.1em;
+}
+
+.warroom-tooltip p {
+    margin: 4px 0;
 }
 
 .capture-events-feed {
-    max-height: 600px;
+    flex: 1;
     overflow-y: auto;
+    max-height: 500px;
+}
+
+.capture-events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.capture-event-item {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px;
+    border-radius: 6px;
+    border-left: 3px solid var(--primary-color);
+    font-size: 0.9em;
+}
+
+.event-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.event-time {
+    color: #d4af37;
+    font-weight: bold;
+    font-size: 0.95em;
+}
+
+.event-team {
+    font-size: 0.9em;
+}
+
+.event-objective {
+    margin: 4px 0;
+    font-size: 0.95em;
+}
+
+.event-map {
+    color: #888;
+    font-size: 0.85em;
 }
 
 .capture-events-table {

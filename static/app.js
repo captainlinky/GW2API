@@ -3345,8 +3345,14 @@ async function renderWarRoomMap(mapType) {
 
     if (!useMetaScaling) {
         const coords = Object.values(objectives)
-            .filter(obj => obj.coord)
+            .filter(obj => obj && obj.coord && obj.coord.length >= 2)
             .map(obj => ({ x: obj.coord[0], y: obj.coord[1] }));
+
+        if (coords.length === 0) {
+            console.error('War Room: No valid objective coordinates found');
+            container.innerHTML = '<p style="text-align: center; color: #f44; padding: 50px;">Error: No objective coordinates available</p>';
+            return;
+        }
 
         minX = Math.min(...coords.map(c => c.x));
         maxX = Math.max(...coords.map(c => c.x));
@@ -3355,6 +3361,18 @@ async function renderWarRoomMap(mapType) {
 
         rangeX = maxX - minX;
         rangeY = maxY - minY;
+
+        console.log(`War Room: Calculated coordinate bounds for ${mapType}:`, {
+            minX, maxX, minY, maxY, rangeX, rangeY, numCoords: coords.length
+        });
+
+        // Add padding to avoid division by zero
+        if (rangeX === 0) rangeX = 1;
+        if (rangeY === 0) rangeY = 1;
+    } else {
+        console.log(`War Room: Using map_rect metadata for ${mapType}:`, {
+            minX, maxX, minY, maxY, rangeX, rangeY
+        });
     }
 
     // Check WebP support
@@ -3411,16 +3429,28 @@ async function renderWarRoomMap(mapType) {
     // Render objectives
     mapData.objectives.forEach(matchObj => {
         const objMeta = objectives[matchObj.id];
-        if (!objMeta || !objMeta.coord) return;
+        if (!objMeta || !objMeta.coord) {
+            console.warn(`War Room: Missing metadata or coord for objective ${matchObj.id}`);
+            return;
+        }
 
         const x = ((objMeta.coord[0] - minX) / rangeX) * config.width;
         const y = config.height - ((objMeta.coord[1] - minY) / rangeY) * config.height;
+
+        // Validate coordinates
+        if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
+            console.error(`War Room: Invalid coordinates for ${objMeta.name}:`, { x, y, coord: objMeta.coord });
+            return;
+        }
 
         const color = getOwnerColor(matchObj.owner);
         const size = getObjectiveSize(matchObj.type);
         const icon = getObjectiveIcon(matchObj.type);
 
-        html += `<g class="objective-marker" onclick="showWarRoomObjectiveDetails('${matchObj.id}')" style="cursor: pointer;">`;
+        html += `<g class="objective-marker"
+                    onmouseover="showWarRoomTooltip(event, '${matchObj.id}')"
+                    onmouseout="hideWarRoomTooltip()"
+                    style="cursor: pointer;">`;
 
         if (matchObj.claimed_by) {
             html += `<circle cx="${x}" cy="${y}" r="${size + 3}" fill="${color}" opacity="0.3"/>`;
@@ -3479,35 +3509,43 @@ async function renderWarRoomMap(mapType) {
     }
 }
 
-// Show objective details in War Room
-function showWarRoomObjectiveDetails(objectiveId) {
-    const objMeta = warroomObjectivesData[warroomCurrentMapType][objectiveId];
-    const matchObj = warroomMapObjectives[warroomCurrentMapType].objectives.find(o => o.id === objectiveId);
+// Show tooltip on hover
+function showWarRoomTooltip(event, objectiveId) {
+    const objMeta = warroomObjectivesData[warroomCurrentMapType]?.[objectiveId];
+    const matchObj = warroomMapObjectives[warroomCurrentMapType]?.objectives.find(o => o.id === objectiveId);
 
-    if (!objMeta || !matchObj) return;
-
-    const detailsContainer = document.getElementById('warroom-objective-details');
-    if (!detailsContainer) return;
-
-    let html = `<div class="objective-details-card">`;
-    html += `<h3 style="color: ${getOwnerColor(matchObj.owner)}">${objMeta.name}</h3>`;
-    html += `<p><strong>Type:</strong> ${matchObj.type}</p>`;
-    html += `<p><strong>Owner:</strong> <span style="color: ${getOwnerColor(matchObj.owner)}">${matchObj.owner}</span></p>`;
-    html += `<p><strong>Points per tick:</strong> ${matchObj.points_tick}</p>`;
-    html += `<p><strong>Points on capture:</strong> ${matchObj.points_capture}</p>`;
-
-    if (matchObj.yaks_delivered !== undefined) {
-        html += `<p><strong>Yaks delivered:</strong> ${matchObj.yaks_delivered}</p>`;
+    if (!objMeta || !matchObj) {
+        console.warn(`War Room: Missing data for objective ${objectiveId}`);
+        return;
     }
+
+    const tooltip = document.getElementById('warroom-tooltip');
+    if (!tooltip) return;
+
+    let html = `<h5 style="color: ${getOwnerColor(matchObj.owner)}">${objMeta.name || 'Unknown'}</h5>`;
+    html += `<p><strong>Type:</strong> ${matchObj.type || 'Unknown'}</p>`;
+    html += `<p><strong>Owner:</strong> <span style="color: ${getOwnerColor(matchObj.owner)}">${matchObj.owner || 'Unknown'}</span></p>`;
+    html += `<p><strong>PPT:</strong> ${matchObj.points_tick || 0}</p>`;
 
     if (matchObj.claimed_by && matchObj.guild_name) {
-        html += `<p><strong>Claimed by:</strong> [${matchObj.guild_tag}] ${matchObj.guild_name}</p>`;
-        html += `<p><strong>Claimed at:</strong> ${new Date(matchObj.claimed_at).toLocaleString()}</p>`;
+        html += `<p><strong>Guild:</strong> [${matchObj.guild_tag || '?'}] ${matchObj.guild_name}</p>`;
     }
 
-    html += `</div>`;
+    if (matchObj.yaks_delivered !== undefined && matchObj.yaks_delivered > 0) {
+        html += `<p><strong>Yaks:</strong> ${matchObj.yaks_delivered}</p>`;
+    }
 
-    detailsContainer.innerHTML = html;
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (event.pageX + 15) + 'px';
+    tooltip.style.top = (event.pageY + 15) + 'px';
+}
+
+function hideWarRoomTooltip() {
+    const tooltip = document.getElementById('warroom-tooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
 }
 
 // Refresh capture events
@@ -3533,23 +3571,16 @@ async function refreshCaptureEvents() {
             return;
         }
 
-        // Create events table
-        let html = '<table class="capture-events-table">';
-        html += '<thead><tr>';
-        html += '<th>Time</th>';
-        html += '<th>Map</th>';
-        html += '<th>Objective</th>';
-        html += '<th>Type</th>';
-        html += '<th>Team</th>';
-        html += '<th>Guild Claim</th>';
-        html += '</tr></thead>';
-        html += '<tbody>';
+        // Create compact events list for side panel
+        let html = '<div class="capture-events-list">';
 
         warroomCaptureEvents.forEach(event => {
-            const timeAgo = formatTimeAgo(event.minutes_ago);
-            const mapName = getMapName(event.map);
+            const timeAgo = formatTimeAgo(event.minutes_ago || 0);
+            const mapName = getMapName(event.map) || 'Unknown Map';
+            const objName = event.objective_name || 'Unknown Objective';
+            const objType = event.objective_type || 'Unknown';
 
-            // Determine team color from objective owner (need to look it up from current match data)
+            // Determine team color from objective owner
             let teamColor = '#888';
             let teamName = 'Unknown';
 
@@ -3557,7 +3588,7 @@ async function refreshCaptureEvents() {
                 for (const map of warroomMatchData.maps) {
                     const obj = map.objectives.find(o => o.id === event.objective_id);
                     if (obj) {
-                        teamName = obj.owner;
+                        teamName = obj.owner || 'Unknown';
                         teamColor = getOwnerColor(obj.owner);
                         break;
                     }
@@ -3565,22 +3596,23 @@ async function refreshCaptureEvents() {
             }
 
             // Format guild info
-            let guildInfo = 'Not claimed';
+            let guildInfo = '';
             if (event.guild_name) {
-                guildInfo = `[${event.guild_tag || '?'}] ${event.guild_name}`;
+                guildInfo = `<div style="font-size: 0.85em; opacity: 0.8;">[${event.guild_tag || '?'}] ${event.guild_name}</div>`;
             }
 
-            html += '<tr>';
-            html += `<td style="white-space: nowrap;">${timeAgo}</td>`;
-            html += `<td>${mapName}</td>`;
-            html += `<td><strong>${event.objective_name}</strong></td>`;
-            html += `<td>${event.objective_type}</td>`;
-            html += `<td style="color: ${teamColor}; font-weight: bold;">${teamName}</td>`;
-            html += `<td style="font-size: 0.9em;">${guildInfo}</td>`;
-            html += '</tr>';
+            html += `<div class="capture-event-item">`;
+            html += `<div class="event-header">`;
+            html += `<span class="event-time">${timeAgo}</span>`;
+            html += `<span class="event-team" style="color: ${teamColor}; font-weight: bold;">${teamName}</span>`;
+            html += `</div>`;
+            html += `<div class="event-objective">${objType}: <strong>${objName}</strong></div>`;
+            html += `<div class="event-map">${mapName}</div>`;
+            html += guildInfo;
+            html += `</div>`;
         });
 
-        html += '</tbody></table>';
+        html += '</div>';
         feedContainer.innerHTML = html;
 
     } catch (error) {
