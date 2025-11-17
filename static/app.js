@@ -3482,34 +3482,43 @@ async function renderWarRoomMap(mapType) {
         let x, y;
 
         if (useProperTransform) {
-            // Transform continent coordinates to canvas coordinates using map metadata
+            // Transform using map_rect - background images use map coordinate space
+            const mapRect = mapMeta.map_rect;
             const continentRect = mapMeta.continent_rect;
+
             const continentMinX = continentRect[0][0];
             const continentMinY = continentRect[0][1];
             const continentMaxX = continentRect[1][0];
             const continentMaxY = continentRect[1][1];
 
-            // Normalize to 0-1 range using continent_rect
-            const normalizedX = (objMeta.coord[0] - continentMinX) / (continentMaxX - continentMinX);
-            const normalizedY = (objMeta.coord[1] - continentMinY) / (continentMaxY - continentMinY);
+            const mapMinX = mapRect[0][0];
+            const mapMinY = mapRect[0][1];
+            const mapMaxX = mapRect[1][0];
+            const mapMaxY = mapRect[1][1];
+
+            // Convert continent coords to map coords using the mapping defined by both rects
+            const continentNormX = (objMeta.coord[0] - continentMinX) / (continentMaxX - continentMinX);
+            const continentNormY = (objMeta.coord[1] - continentMinY) / (continentMaxY - continentMinY);
+
+            const mapX = mapMinX + continentNormX * (mapMaxX - mapMinX);
+            const mapY = mapMinY + continentNormY * (mapMaxY - mapMinY);
+
+            // Normalize map coords to 0-1 range for canvas
+            const normalizedX = (mapX - mapMinX) / (mapMaxX - mapMinX);
+            const normalizedY = (mapY - mapMinY) / (mapMaxY - mapMinY);
 
             // Scale to canvas size (flip Y axis since SVG Y increases downward)
             x = normalizedX * config.width;
             y = config.height - (normalizedY * config.height);
 
-            // Apply calibration offset (from user debug measurements on Eternal Battlegrounds)
-            // Average offset: X=-16px, Y=-527px (9 objectives calibrated)
-            x += -16;
-            y += -527;
-
             // Log first objective transformation for debugging
             if (!firstObjectiveLogged) {
                 console.log(`War Room: Sample transformation for ${objMeta.name}:`);
                 console.log(`  Continent coord: [${objMeta.coord[0]}, ${objMeta.coord[1]}]`);
-                console.log(`  Continent bounds: [${continentMinX}, ${continentMinY}] to [${continentMaxX}, ${continentMaxY}]`);
+                console.log(`  Map coord: [${mapX.toFixed(1)}, ${mapY.toFixed(1)}]`);
+                console.log(`  Map bounds: [${mapMinX}, ${mapMinY}] to [${mapMaxX}, ${mapMaxY}]`);
                 console.log(`  Normalized: [${normalizedX.toFixed(3)}, ${normalizedY.toFixed(3)}]`);
-                console.log(`  Canvas coord (before offset): [${(normalizedX * config.width).toFixed(1)}, ${(config.height - normalizedY * config.height).toFixed(1)}]`);
-                console.log(`  Canvas coord (after offset): [${x.toFixed(1)}, ${y.toFixed(1)}] (size: ${config.width}x${config.height})`);
+                console.log(`  Canvas coord: [${x.toFixed(1)}, ${y.toFixed(1)}] (size: ${config.width}x${config.height})`);
                 firstObjectiveLogged = true;
             }
         } else {
