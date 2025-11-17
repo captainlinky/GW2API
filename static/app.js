@@ -3337,8 +3337,15 @@ async function renderWarRoomMap(mapType) {
     let useProperTransform = false;
 
     try {
-        const firstObj = Object.values(objectives).find(o => o && (o.map_id || o.mapId));
-        const candidateMapId = firstObj ? (firstObj.map_id || firstObj.mapId) : (mapData && mapData.id);
+        // Get map ID from match data first (current week's actual map), fallback to objectives metadata
+        let candidateMapId = mapData && mapData.id;
+
+        if (!candidateMapId) {
+            const firstObj = Object.values(objectives).find(o => o && (o.map_id || o.mapId));
+            candidateMapId = firstObj ? (firstObj.map_id || firstObj.mapId) : null;
+        }
+
+        console.log(`War Room: Attempting to load map metadata for ${mapType}, map ID: ${candidateMapId}`);
 
         if (candidateMapId) {
             mapMeta = await window.GW2Data.getMapMeta(candidateMapId);
@@ -3347,7 +3354,11 @@ async function renderWarRoomMap(mapType) {
                 console.log(`War Room: Using coordinate transformation for ${mapType}:`, {
                     mapId: candidateMapId,
                     continent_rect: mapMeta.continent_rect,
-                    map_rect: mapMeta.map_rect
+                    map_rect: mapMeta.map_rect,
+                    continentMin: `[${mapMeta.continent_rect[0][0]}, ${mapMeta.continent_rect[0][1]}]`,
+                    continentMax: `[${mapMeta.continent_rect[1][0]}, ${mapMeta.continent_rect[1][1]}]`,
+                    mapMin: `[${mapMeta.map_rect[0][0]}, ${mapMeta.map_rect[0][1]}]`,
+                    mapMax: `[${mapMeta.map_rect[1][0]}, ${mapMeta.map_rect[1][1]}]`
                 });
             }
         }
@@ -3448,6 +3459,7 @@ async function renderWarRoomMap(mapType) {
     }
 
     // Render objectives
+    let firstObjectiveLogged = false;
     mapData.objectives.forEach(matchObj => {
         const objMeta = objectives[matchObj.id];
         if (!objMeta || !objMeta.coord) {
@@ -3472,6 +3484,17 @@ async function renderWarRoomMap(mapType) {
             // Scale to canvas size (flip Y axis since SVG Y increases downward)
             x = normalizedX * config.width;
             y = config.height - (normalizedY * config.height);
+
+            // Log first objective transformation for debugging
+            if (!firstObjectiveLogged) {
+                console.log(`War Room: Sample transformation for ${objMeta.name}:`, {
+                    continentCoord: objMeta.coord,
+                    normalized: [normalizedX.toFixed(3), normalizedY.toFixed(3)],
+                    canvasCoord: [x.toFixed(1), y.toFixed(1)],
+                    canvasSize: [config.width, config.height]
+                });
+                firstObjectiveLogged = true;
+            }
         } else {
             // Fallback: use calculated bounds from objectives
             x = ((objMeta.coord[0] - minX) / rangeX) * config.width;
