@@ -323,8 +323,13 @@
                             <input id="warroom-toggle-grid" type="checkbox" checked onchange="renderWarRoomMap(window.warroomCurrentMapType)"/>
                             Show grid
                         </label>
+                        <label style="margin-left: 10px; display: inline-flex; align-items: center; gap: 6px;">
+                            <input id="warroom-debug-mode" type="checkbox" onchange="toggleWarRoomDebugMode()"/>
+                            🔧 Debug Mode
+                        </label>
                         <button onclick="stopWarRoomAutoRefresh()" class="btn btn-small">⏸️ Pause</button>
                         <button onclick="startWarRoomAutoRefresh()" class="btn btn-small">▶️ Resume</button>
+                        <button onclick="showDebugStats()" class="btn btn-small" style="display: none;" id="show-debug-stats">📊 Show Offsets</button>
                     </div>
 
                     <div class="warroom-map-container">
