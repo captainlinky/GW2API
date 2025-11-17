@@ -3487,13 +3487,19 @@ async function renderWarRoomMap(mapType) {
             x = normalizedX * config.width;
             y = config.height - (normalizedY * config.height);
 
+            // Apply calibration offset (from user debug measurements on Eternal Battlegrounds)
+            // Average offset: X=-16px, Y=-527px (9 objectives calibrated)
+            x += -16;
+            y += -527;
+
             // Log first objective transformation for debugging
             if (!firstObjectiveLogged) {
                 console.log(`War Room: Sample transformation for ${objMeta.name}:`);
                 console.log(`  Continent coord: [${objMeta.coord[0]}, ${objMeta.coord[1]}]`);
                 console.log(`  Continent bounds: [${continentMinX}, ${continentMinY}] to [${continentMaxX}, ${continentMaxY}]`);
                 console.log(`  Normalized: [${normalizedX.toFixed(3)}, ${normalizedY.toFixed(3)}]`);
-                console.log(`  Canvas coord: [${x.toFixed(1)}, ${y.toFixed(1)}] (size: ${config.width}x${config.height})`);
+                console.log(`  Canvas coord (before offset): [${(normalizedX * config.width).toFixed(1)}, ${(config.height - normalizedY * config.height).toFixed(1)}]`);
+                console.log(`  Canvas coord (after offset): [${x.toFixed(1)}, ${y.toFixed(1)}] (size: ${config.width}x${config.height})`);
                 firstObjectiveLogged = true;
             }
         } else {
