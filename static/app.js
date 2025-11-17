@@ -3450,20 +3450,14 @@ async function renderWarRoomMap(mapType) {
         }
     };
 
-    // Actual background image dimensions (from the WebP/JPG files)
-    const bgImageDimensions = {
-        'Center': { width: 3850, height: 3833 },        // EB is nearly square
-        'RedHome': { width: 3228, height: 3245 },       // Desert BL is nearly square
-        'BlueHome': { width: 2662, height: 3625 },      // Alpine BL is taller
-        'GreenHome': { width: 2692, height: 3637 }      // Alpine BL is taller
-    };
+    // Size canvas based on map_rect for proper objective positioning
+    if (useProperTransform && mapMeta && mapMeta.map_rect) {
+        const mapRect = mapMeta.map_rect;
+        const mapWidth = mapRect[1][0] - mapRect[0][0];
+        const mapHeight = mapRect[1][1] - mapRect[0][1];
+        const aspectRatio = mapHeight / mapWidth;
 
-    // Adjust canvas size to match background image aspect ratio
-    if (bgImageDimensions[mapType]) {
-        const imgDims = bgImageDimensions[mapType];
-        const aspectRatio = imgDims.height / imgDims.width;
-
-        // Scale to reasonable canvas size while maintaining aspect ratio
+        // Scale to reasonable canvas size while maintaining map_rect aspect ratio
         const targetWidth = 2048;
         config = {
             ...config,
@@ -3471,15 +3465,15 @@ async function renderWarRoomMap(mapType) {
             height: Math.round(targetWidth * aspectRatio)
         };
 
-        console.log(`War Room: Canvas sized to match ${mapType} background image: ${config.width}x${config.height} (image: ${imgDims.width}x${imgDims.height}, aspect: ${aspectRatio.toFixed(3)}:1)`);
+        console.log(`War Room: Canvas sized from map_rect for ${mapType}: ${config.width}x${config.height} (aspect: ${aspectRatio.toFixed(3)}:1)`);
     }
 
     // Create SVG map
     let html = `<svg class="wvw-map-svg" viewBox="0 0 ${config.width} ${config.height}">`;
 
-    // Background image
+    // Background image - use xMidYMid slice to fill canvas while maintaining aspect ratio
     if (bgUrls[mapType]) {
-        html += `<image id="warroom-map-bg" href="${bgUrls[mapType].low}" width="${config.width}" height="${config.height}" preserveAspectRatio="none" opacity="0.85"/>`;
+        html += `<image id="warroom-map-bg" href="${bgUrls[mapType].low}" width="${config.width}" height="${config.height}" preserveAspectRatio="xMidYMid slice" opacity="0.85"/>`;
     } else {
         html += `<rect width="${config.width}" height="${config.height}" fill="#1a1a1a" stroke="#333" stroke-width="2"/>`;
     }
