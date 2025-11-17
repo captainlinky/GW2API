@@ -3211,6 +3211,14 @@ let warroomAutoRefreshInterval = null;
 let warroomCaptureEvents = [];
 let warroomDebugMode = false;
 let warroomDebugAdjustments = {}; // Store manual position adjustments
+let warroomMapMeta = {}; // Store map metadata for debugging
+
+// Debug function to expose map metadata
+window.getWarRoomMapMeta = function(mapType) {
+    mapType = mapType || warroomCurrentMapType;
+    console.log('Map metadata for', mapType, ':', JSON.stringify(warroomMapMeta[mapType], null, 2));
+    return warroomMapMeta[mapType];
+};
 
 // Initialize War Room Maps
 async function initWarRoomMaps() {
@@ -3353,6 +3361,8 @@ async function renderWarRoomMap(mapType) {
             mapMeta = await window.GW2Data.getMapMeta(candidateMapId);
             if (mapMeta && mapMeta.continent_rect && mapMeta.map_rect) {
                 useProperTransform = true;
+                // Store for debug access
+                warroomMapMeta[mapType] = mapMeta;
                 console.log(`War Room: Using coordinate transformation for ${mapType}:`, {
                     mapId: candidateMapId,
                     continent_rect: mapMeta.continent_rect,
