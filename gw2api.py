@@ -212,7 +212,21 @@ class GW2API:
     def get_currencies(self) -> List[Dict]:
         """Get all currency information."""
         return self._request('currencies', params={'ids': 'all'})
-    
+
+    def get_maps(self, map_ids: Optional[List[int]] = None) -> Union[List[int], List[Dict]]:
+        """
+        Get map information including coordinates and boundaries.
+
+        Args:
+            map_ids: List of map IDs. If None, returns list of all available IDs.
+
+        Returns:
+            List of map data including map_rect and continent_rect coordinates
+        """
+        if map_ids:
+            return self._request('maps', params={'ids': ','.join(map(str, map_ids))})
+        return self._request('maps')
+
     # Trading Post Endpoints
     def get_tp_prices(self, item_ids: Optional[List[int]] = None) -> Union[List[Dict], Dict]:
         """Get Trading Post prices."""
