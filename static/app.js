@@ -3331,46 +3331,70 @@ async function renderWarRoomMap(mapType) {
     const mapData = warroomMapObjectives[mapType];
     const objectives = warroomObjectivesData[mapType];
 
-    // Calculate bounds from actual objective coordinates
-    // Note: Objective coords are in "continent coordinates" not "map coordinates"
-    // so we calculate bounds directly from the objectives rather than using map_rect
-    let minX, minY, maxX, maxY, rangeX, rangeY;
+    // Get map metadata for proper coordinate transformation
+    // Objectives use "continent coordinates", we need to transform to map pixel coordinates
+    let mapMeta = null;
+    let useProperTransform = false;
 
-    const coords = Object.values(objectives)
-        .filter(obj => obj && obj.coord && obj.coord.length >= 2)
-        .map(obj => ({ x: obj.coord[0], y: obj.coord[1] }));
+    try {
+        const firstObj = Object.values(objectives).find(o => o && (o.map_id || o.mapId));
+        const candidateMapId = firstObj ? (firstObj.map_id || firstObj.mapId) : (mapData && mapData.id);
 
-    if (coords.length === 0) {
-        console.error('War Room: No valid objective coordinates found');
-        container.innerHTML = '<p style="text-align: center; color: #f44; padding: 50px;">Error: No objective coordinates available</p>';
-        return;
+        if (candidateMapId) {
+            mapMeta = await window.GW2Data.getMapMeta(candidateMapId);
+            if (mapMeta && mapMeta.continent_rect && mapMeta.map_rect) {
+                useProperTransform = true;
+                console.log(`War Room: Using coordinate transformation for ${mapType}:`, {
+                    mapId: candidateMapId,
+                    continent_rect: mapMeta.continent_rect,
+                    map_rect: mapMeta.map_rect
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('War Room: Failed to load map metadata, using fallback:', e);
     }
 
-    minX = Math.min(...coords.map(c => c.x));
-    maxX = Math.max(...coords.map(c => c.x));
-    minY = Math.min(...coords.map(c => c.y));
-    maxY = Math.max(...coords.map(c => c.y));
+    // Fallback: calculate bounds from objectives if no map metadata
+    let minX, minY, maxX, maxY, rangeX, rangeY;
 
-    rangeX = maxX - minX;
-    rangeY = maxY - minY;
+    if (!useProperTransform) {
+        const coords = Object.values(objectives)
+            .filter(obj => obj && obj.coord && obj.coord.length >= 2)
+            .map(obj => ({ x: obj.coord[0], y: obj.coord[1] }));
 
-    // Add 10% padding around edges for better visibility
-    const paddingX = rangeX * 0.1;
-    const paddingY = rangeY * 0.1;
-    minX -= paddingX;
-    maxX += paddingX;
-    minY -= paddingY;
-    maxY += paddingY;
-    rangeX = maxX - minX;
-    rangeY = maxY - minY;
+        if (coords.length === 0) {
+            console.error('War Room: No valid objective coordinates found');
+            container.innerHTML = '<p style="text-align: center; color: #f44; padding: 50px;">Error: No objective coordinates available</p>';
+            return;
+        }
 
-    console.log(`War Room: Calculated coordinate bounds for ${mapType}:`, {
-        minX, maxX, minY, maxY, rangeX, rangeY, numCoords: coords.length
-    });
+        minX = Math.min(...coords.map(c => c.x));
+        maxX = Math.max(...coords.map(c => c.x));
+        minY = Math.min(...coords.map(c => c.y));
+        maxY = Math.max(...coords.map(c => c.y));
 
-    // Protect against division by zero
-    if (rangeX === 0) rangeX = 1;
-    if (rangeY === 0) rangeY = 1;
+        rangeX = maxX - minX;
+        rangeY = maxY - minY;
+
+        // Add 10% padding around edges for better visibility
+        const paddingX = rangeX * 0.1;
+        const paddingY = rangeY * 0.1;
+        minX -= paddingX;
+        maxX += paddingX;
+        minY -= paddingY;
+        maxY += paddingY;
+        rangeX = maxX - minX;
+        rangeY = maxY - minY;
+
+        console.log(`War Room: Fallback coordinate bounds for ${mapType}:`, {
+            minX, maxX, minY, maxY, rangeX, rangeY, numCoords: coords.length
+        });
+
+        // Protect against division by zero
+        if (rangeX === 0) rangeX = 1;
+        if (rangeY === 0) rangeY = 1;
+    }
 
     // Check WebP support
     const SUPPORTS_WEBP = (() => {
@@ -3431,8 +3455,28 @@ async function renderWarRoomMap(mapType) {
             return;
         }
 
-        const x = ((objMeta.coord[0] - minX) / rangeX) * config.width;
-        const y = config.height - ((objMeta.coord[1] - minY) / rangeY) * config.height;
+        let x, y;
+
+        if (useProperTransform) {
+            // Transform continent coordinates to canvas coordinates using map metadata
+            const continentRect = mapMeta.continent_rect;
+            const continentMinX = continentRect[0][0];
+            const continentMinY = continentRect[0][1];
+            const continentMaxX = continentRect[1][0];
+            const continentMaxY = continentRect[1][1];
+
+            // Normalize to 0-1 range using continent_rect
+            const normalizedX = (objMeta.coord[0] - continentMinX) / (continentMaxX - continentMinX);
+            const normalizedY = (objMeta.coord[1] - continentMinY) / (continentMaxY - continentMinY);
+
+            // Scale to canvas size (flip Y axis since SVG Y increases downward)
+            x = normalizedX * config.width;
+            y = config.height - (normalizedY * config.height);
+        } else {
+            // Fallback: use calculated bounds from objectives
+            x = ((objMeta.coord[0] - minX) / rangeX) * config.width;
+            y = config.height - ((objMeta.coord[1] - minY) / rangeY) * config.height;
+        }
 
         // Validate coordinates
         if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
