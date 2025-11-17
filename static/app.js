@@ -3456,6 +3456,17 @@ async function renderWarRoomMap(mapType) {
                 const bg = container.querySelector('#warroom-map-bg');
                 if (bg) bg.setAttribute('href', bgUrls[mapType].high);
             };
+            img.onerror = () => {
+                // Remote wiki fallback if local high-res missing
+                const fallback = {
+                    'Center': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Eternal_Battlegrounds_map.jpg?width=2048',
+                    'RedHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Red_Desert_Borderlands_map.jpg?width=2048',
+                    'BlueHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Blue_Alpine_Borderlands_map.jpg?width=2048',
+                    'GreenHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Green_Alpine_Borderlands_map.jpg?width=2048'
+                };
+                const bg = container.querySelector('#warroom-map-bg');
+                if (bg && fallback[mapType]) bg.setAttribute('href', fallback[mapType]);
+            };
             img.src = bgUrls[mapType].high;
         }
     } catch (e) {
