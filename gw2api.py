@@ -182,25 +182,31 @@ class GW2API:
     def get_worlds(self) -> List[Dict]:
         """Get all world (server) information."""
         worlds = self._request('worlds', params={'ids': 'all'})
-        
-        # Add relink world instance names (these don't exist in the API but are shown in-game)
-        # These 11xxx IDs are temporary world instance identifiers for WvW relinks
-        # The names cycle through the three instance names based on the matchup
-        relink_worlds = [
-            {'id': 11001, 'name': 'Tombs of Drascir', 'population': 'Full'},
-            {'id': 11002, 'name': 'Yohlon Haven', 'population': 'Full'},
-            {'id': 11003, 'name': 'Moogooloo', 'population': 'Full'},
-            {'id': 11004, 'name': 'Moogooloo', 'population': 'Full'},
-            {'id': 11005, 'name': 'Yohlon Haven', 'population': 'Full'},
-            {'id': 11006, 'name': 'Tombs of Drascir', 'population': 'Full'},
-            {'id': 11007, 'name': 'Moogooloo', 'population': 'Full'},
-            {'id': 11008, 'name': 'Yohlon Haven', 'population': 'Full'},
-            {'id': 11009, 'name': 'Tombs of Drascir', 'population': 'Full'},
-        ]
-        
-        if isinstance(worlds, list):
-            worlds.extend(relink_worlds)
-        
+
+        # Add WvW team names from alliance_names.json
+        # These 11xxx/12xxx IDs are WvW battlefield identifiers that don't exist in the API
+        try:
+            # Get the directory where this script is located
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            alliance_file = os.path.join(script_dir, 'alliance_names.json')
+
+            with open(alliance_file, 'r') as f:
+                alliance_data = json.load(f)
+
+            # Build team worlds list from team_names in JSON
+            team_worlds = []
+            for team_id, team_name in alliance_data.get('team_names', {}).items():
+                team_worlds.append({
+                    'id': int(team_id),
+                    'name': team_name,
+                    'population': 'Full'
+                })
+
+            if isinstance(worlds, list):
+                worlds.extend(team_worlds)
+        except Exception as e:
+            logger.warning(f"Could not load team names from alliance_names.json: {e}")
+
         return worlds
     
     def get_currencies(self) -> List[Dict]:
