@@ -333,31 +333,27 @@
                                 Click "Load Interactive Maps" to view live WvW battlefield status
                             </p>
                         </div>
-                        <div id="warroom-objective-details" class="objective-details-panel">
-                            <p style="opacity: 0.6; text-align: center; padding: 20px;">
-                                Click an objective on the map to view details
-                            </p>
+
+                        <!-- Capture Events Feed (Right Panel) -->
+                        <div class="warroom-events-panel">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <h4 style="margin: 0;">📜 Recent Captures</h4>
+                                <button onclick="refreshCaptureEvents()" class="btn btn-small">🔄</button>
+                            </div>
+                            <div id="capture-events-feed" class="capture-events-feed">
+                                <p style="text-align: center; opacity: 0.6; padding: 20px;">
+                                    Load maps to view recent captures
+                                </p>
+                            </div>
+                            <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; font-size: 0.8em; color: #a0a0a0;">
+                                💡 Last 24 hours of captures
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Capture Events Feed -->
-                <div class="warroom-events-section">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <h3 style="margin: 0;">📜 Recent Capture Events</h3>
-                        <button onclick="refreshCaptureEvents()" class="btn btn-small">🔄 Refresh Events</button>
-                    </div>
-                    <div class="events-feed-container">
-                        <div id="capture-events-feed" class="capture-events-feed">
-                            <p style="text-align: center; opacity: 0.6; padding: 40px;">
-                                Click "Load Interactive Maps" or "Refresh Events" to view recent captures
-                            </p>
-                        </div>
-                    </div>
-                    <div class="events-legend" style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.9em; color: #a0a0a0;">
-                        <strong style="color: #d4af37;">💡 Event Feed:</strong> Shows the last 24 hours of objective captures across all maps. Events update in real-time as objectives change hands.
-                    </div>
-                </div>
+                <!-- Hover Tooltip (hidden by default) -->
+                <div id="warroom-tooltip" class="warroom-tooltip" style="display: none;"></div>
             </div>
 
             <!-- Account Tab -->
