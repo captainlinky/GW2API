@@ -790,8 +790,8 @@ function renderActivityChart(timeline, teamNames) {
         // Show label based on interval
         if (index % labelInterval === 0 || index === timeline.length - 1) {
             const x = padding.left + index * xStep;
-            // For longer time windows (7-day view), show day of week + date
-            if (timeline.length > 48) {
+            // For time windows over 24 hours, show day of week + date (and time for 24h view)
+            if (timeline.length > 24) {
                 let time;
                 if (bucket.timestamp) {
                     time = new Date(bucket.timestamp);
@@ -800,8 +800,14 @@ function renderActivityChart(timeline, teamNames) {
                 }
                 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const dayName = dayNames[time.getDay()];
-                const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
-                ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                // For 7-day view, just show day and date; for 24h view, add time
+                if (timeline.length > 48) {
+                    const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
+                    ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                } else {
+                    const dateLabel = `${dayName} ${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+                    ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                }
             } else {
                 ctx.fillText(timeLabels[index].label, x, padding.top + chartHeight + 20);
             }
@@ -1190,8 +1196,8 @@ function renderKDRChart(timeline, teamNames, kills, deaths) {
         // Show label based on interval
         if (index % labelInterval === 0 || index === timeline.length - 1) {
             const x = padding.left + index * xStep;
-            // For longer time windows (7-day view), show day of week + date
-            if (timeline.length > 48) {
+            // For time windows over 24 hours, show day of week + date (and time for 24h view)
+            if (timeline.length > 24) {
                 let time;
                 if (bucket.timestamp) {
                     time = new Date(bucket.timestamp);
@@ -1200,8 +1206,14 @@ function renderKDRChart(timeline, teamNames, kills, deaths) {
                 }
                 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const dayName = dayNames[time.getDay()];
-                const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
-                ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                // For 7-day view, just show day and date; for 24h view, add time
+                if (timeline.length > 48) {
+                    const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
+                    ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                } else {
+                    const dateLabel = `${dayName} ${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+                    ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                }
             } else {
                 ctx.fillText(timeLabels[index].label, x, padding.top + chartHeight + 20);
             }
@@ -1570,7 +1582,8 @@ function renderPPTChart(timeline, teamNames, currentPPT) {
     timeline.forEach((bucket, index) => {
         if (index % labelInterval === 0 || index === timeline.length - 1) {
             const x = padding.left + index * xStep;
-            if (timeline.length > 48) {
+            // For time windows over 24 hours, show day of week + date (and time for 24h view)
+            if (timeline.length > 24) {
                 let time;
                 if (bucket.timestamp) {
                     time = new Date(bucket.timestamp);
@@ -1579,8 +1592,14 @@ function renderPPTChart(timeline, teamNames, currentPPT) {
                 }
                 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const dayName = dayNames[time.getDay()];
-                const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
-                ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                // For 7-day view, just show day and date; for 24h view, add time
+                if (timeline.length > 48) {
+                    const dateLabel = `${dayName} ${time.getMonth() + 1}/${time.getDate()}`;
+                    ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                } else {
+                    const dateLabel = `${dayName} ${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+                    ctx.fillText(dateLabel, x, padding.top + chartHeight + 20);
+                }
             } else {
                 ctx.fillText(timeLabels[index].label, x, padding.top + chartHeight + 20);
             }
