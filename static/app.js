@@ -2466,8 +2466,8 @@ async function loadTradingPost() {
         
         if (data.status === 'success') {
             let html = '<h3>Trading Post Prices</h3>';
-            html += '<table class="data-table"><thead><tr><th>Item</th><th>Buy Price</th><th>Sell Price</th><th>Spread</th><th>Supply</th><th>Demand</th></tr></thead><tbody>';
-            
+            html += '<table class="data-table"><thead><tr><th>Item</th><th>Buy Price</th><th>Sell Price</th><th>Spread</th><th>Supply</th><th>Demand</th><th>Action</th></tr></thead><tbody>';
+
             data.data.forEach(item => {
                 html += `
                     <tr>
@@ -2477,12 +2477,18 @@ async function loadTradingPost() {
                         <td>${item.spread.toLocaleString()}c</td>
                         <td>${item.sell_quantity.toLocaleString()}</td>
                         <td>${item.buy_quantity.toLocaleString()}</td>
+                        <td><button class="btn btn-small" onclick="loadItemEconomics(${item.id})">📊 Analyze</button></td>
                     </tr>
                 `;
             });
-            
+
             html += '</tbody></table>';
             resultDiv.innerHTML = html;
+
+            // Auto-analyze if only one item was searched
+            if (data.data.length === 1) {
+                loadItemEconomics(data.data[0].id);
+            }
         } else {
             resultDiv.innerHTML = `<div class="status-message status-error">Error: ${data.message}</div>`;
         }
@@ -3629,5 +3635,351 @@ function stopWarRoomAutoRefresh() {
         clearInterval(warroomAutoRefreshInterval);
         warroomAutoRefreshInterval = null;
         console.log('War Room: Auto-refresh stopped');
+    }
+}
+
+// ============================================================================
+// TRADING POST ECONOMIC ANALYSIS
+// ============================================================================
+
+async function loadItemEconomics(itemId) {
+    const section = document.getElementById('tp-economic-analysis');
+    if (!section) return;
+
+    try {
+        // Show loading state
+        section.style.display = 'block';
+        section.innerHTML = '<p style="text-align: center; padding: 40px;"><span class="loading"></span> Loading market analysis...</p>';
+
+        const response = await fetch(`/api/tp/economics/${itemId}`);
+        const data = await response.json();
+
+        if (data.status !== 'success') {
+            section.innerHTML = `<p style="text-align: center; color: #f44;">Failed to load analysis: ${data.message || 'Unknown error'}</p>`;
+            return;
+        }
+
+        const econ = data.data;
+
+        // Rebuild the section structure
+        section.innerHTML = `
+            <h3>📊 Market Analysis</h3>
+            <div class="economic-header">
+                <div id="economic-item-info" class="economic-item-info"></div>
+                <div id="economic-recommendation" class="economic-recommendation"></div>
+            </div>
+            <div class="economic-grid">
+                <div class="economic-card">
+                    <h4>💰 Price Information</h4>
+                    <div id="economic-prices"></div>
+                </div>
+                <div class="economic-card">
+                    <h4>📦 Supply & Demand</h4>
+                    <div id="economic-supply-demand"></div>
+                </div>
+            </div>
+            <div class="economic-chart-section">
+                <h4>📈 Order Book Depth</h4>
+                <canvas id="order-book-chart"></canvas>
+                <div class="chart-legend" style="margin-top: 10px;">
+                    <span class="legend-item"><span class="legend-dot" style="background: #27ae60;"></span> Buy Orders</span>
+                    <span class="legend-item"><span class="legend-dot" style="background: #e74c3c;"></span> Sell Listings</span>
+                </div>
+            </div>
+        `;
+
+        // Populate item info
+        const itemInfo = document.getElementById('economic-item-info');
+        itemInfo.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 15px;">
+                ${econ.item.icon ? `<img src="${econ.item.icon}" alt="${econ.item.name}" style="width: 48px; height: 48px;" />` : ''}
+                <div>
+                    <h4 style="margin: 0; font-size: 1.3em;">${econ.item.name}</h4>
+                    <p style="margin: 5px 0 0 0; opacity: 0.8;">${econ.item.rarity}</p>
+                </div>
+            </div>
+        `;
+
+        // Populate recommendation
+        const recommendation = document.getElementById('economic-recommendation');
+        const rec = econ.recommendation;
+        recommendation.innerHTML = `
+            <div class="recommendation-badge" style="background: ${rec.color};">
+                <div class="recommendation-type">${rec.type}</div>
+                <div class="recommendation-reasons">
+                    ${rec.reasons.map(r => `<div>• ${r}</div>`).join('')}
+                </div>
+            </div>
+        `;
+
+        // Populate prices
+        const prices = document.getElementById('economic-prices');
+        prices.innerHTML = `
+            <table class="economic-table">
+                <tr>
+                    <td><strong>Highest Buy Order:</strong></td>
+                    <td style="color: #27ae60;">${econ.prices.highest_buy_formatted}</td>
+                </tr>
+                <tr>
+                    <td><strong>Lowest Sell Listing:</strong></td>
+                    <td style="color: #e74c3c;">${econ.prices.lowest_sell_formatted}</td>
+                </tr>
+                <tr>
+                    <td><strong>Spread:</strong></td>
+                    <td>${econ.prices.spread_formatted} (${econ.prices.spread_percent}%)</td>
+                </tr>
+            </table>
+        `;
+
+        // Populate supply/demand
+        const supplyDemand = document.getElementById('economic-supply-demand');
+        const ratio = econ.supply_demand.ratio;
+        let ratioColor = '#d4af37';
+        let ratioText = 'Balanced';
+        if (ratio < 0.5) {
+            ratioColor = '#27ae60';
+            ratioText = 'High Demand';
+        } else if (ratio > 2) {
+            ratioColor = '#e74c3c';
+            ratioText = 'High Supply';
+        }
+
+        supplyDemand.innerHTML = `
+            <table class="economic-table">
+                <tr>
+                    <td><strong>Buy Orders:</strong></td>
+                    <td>${econ.supply_demand.total_buy_orders.toLocaleString()}</td>
+                </tr>
+                <tr>
+                    <td><strong>Sell Listings:</strong></td>
+                    <td>${econ.supply_demand.total_sell_listings.toLocaleString()}</td>
+                </tr>
+                <tr>
+                    <td><strong>S/D Ratio:</strong></td>
+                    <td style="color: ${ratioColor};">${ratio} (${ratioText})</td>
+                </tr>
+                <tr>
+                    <td><strong>Market Velocity:</strong></td>
+                    <td>${Math.round(econ.supply_demand.velocity).toLocaleString()}</td>
+                </tr>
+            </table>
+        `;
+
+        // Render order book chart
+        renderOrderBookChart(econ.order_book, econ.prices);
+
+    } catch (error) {
+        console.error('Error loading item economics:', error);
+        section.innerHTML = `<p style="text-align: center; color: #f44;">Error loading analysis: ${error.message}</p>`;
+    }
+}
+
+function renderOrderBookChart(orderBook, prices) {
+    const canvas = document.getElementById('order-book-chart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width = canvas.offsetWidth;
+    const height = canvas.height = 400;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    const margin = { left: 80, right: 20, top: 40, bottom: 60 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+
+    // Prepare data
+    const buys = orderBook.buys || [];
+    const sells = orderBook.sells || [];
+
+    if (buys.length === 0 && sells.length === 0) {
+        ctx.fillStyle = '#888';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('No order book data available', width / 2, height / 2);
+        return;
+    }
+
+    // Calculate cumulative quantities for depth chart
+    let buysCumulative = [];
+    let sellsCumulative = [];
+    let cumulativeBuy = 0;
+    let cumulativeSell = 0;
+
+    buys.forEach(order => {
+        cumulativeBuy += order.quantity;
+        buysCumulative.push({ price: order.price, quantity: cumulativeBuy });
+    });
+
+    sells.forEach(order => {
+        cumulativeSell += order.quantity;
+        sellsCumulative.push({ price: order.price, quantity: cumulativeSell });
+    });
+
+    // Find price range
+    const allPrices = [...buys.map(o => o.price), ...sells.map(o => o.price)];
+    const minPrice = Math.min(...allPrices);
+    const maxPrice = Math.max(...allPrices);
+    const priceRange = maxPrice - minPrice;
+
+    // Find quantity range
+    const maxQuantity = Math.max(
+        buysCumulative.length > 0 ? buysCumulative[buysCumulative.length - 1].quantity : 0,
+        sellsCumulative.length > 0 ? sellsCumulative[sellsCumulative.length - 1].quantity : 0
+    );
+
+    // Draw axes
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(margin.left, margin.top);
+    ctx.lineTo(margin.left, height - margin.bottom);
+    ctx.lineTo(width - margin.right, height - margin.bottom);
+    ctx.stroke();
+
+    // Draw labels
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Order Book Depth Chart', width / 2, 20);
+
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('Price (copper)', width / 2, height - 10);
+
+    ctx.save();
+    ctx.translate(15, height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('Cumulative Quantity', 0, 0);
+    ctx.restore();
+
+    // Helper function to convert price to x position
+    function priceToX(price) {
+        return margin.left + ((price - minPrice) / priceRange) * chartWidth;
+    }
+
+    // Helper function to convert quantity to y position
+    function quantityToY(quantity) {
+        return height - margin.bottom - (quantity / maxQuantity) * chartHeight;
+    }
+
+    // Draw buy orders (green, left side)
+    if (buysCumulative.length > 0) {
+        ctx.strokeStyle = '#27ae60';
+        ctx.fillStyle = 'rgba(39, 174, 96, 0.1)';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(margin.left, height - margin.bottom);
+
+        buysCumulative.forEach(point => {
+            const x = priceToX(point.price);
+            const y = quantityToY(point.quantity);
+            ctx.lineTo(x, y);
+        });
+
+        ctx.lineTo(priceToX(buysCumulative[buysCumulative.length - 1].price), height - margin.bottom);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    // Draw sell orders (red, right side)
+    if (sellsCumulative.length > 0) {
+        ctx.strokeStyle = '#e74c3c';
+        ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(priceToX(sellsCumulative[0].price), height - margin.bottom);
+
+        sellsCumulative.forEach(point => {
+            const x = priceToX(point.price);
+            const y = quantityToY(point.quantity);
+            ctx.lineTo(x, y);
+        });
+
+        ctx.lineTo(width - margin.right, height - margin.bottom);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    // Draw price gridlines and labels
+    const numPriceLines = 5;
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#888';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+
+    for (let i = 0; i <= numPriceLines; i++) {
+        const price = minPrice + (priceRange / numPriceLines) * i;
+        const x = priceToX(price);
+
+        ctx.beginPath();
+        ctx.moveTo(x, margin.top);
+        ctx.lineTo(x, height - margin.bottom);
+        ctx.stroke();
+
+        const gold = Math.floor(price / 10000);
+        const silver = Math.floor((price % 10000) / 100);
+        const copper = price % 100;
+        let label = '';
+        if (gold > 0) label = `${gold}g ${silver}s`;
+        else if (silver > 0) label = `${silver}s ${copper}c`;
+        else label = `${copper}c`;
+
+        ctx.fillText(label, x, height - margin.bottom + 15);
+    }
+
+    // Draw quantity gridlines and labels
+    const numQuantityLines = 4;
+    ctx.textAlign = 'right';
+
+    for (let i = 0; i <= numQuantityLines; i++) {
+        const quantity = (maxQuantity / numQuantityLines) * i;
+        const y = quantityToY(quantity);
+
+        ctx.strokeStyle = '#333';
+        ctx.beginPath();
+        ctx.moveTo(margin.left, y);
+        ctx.lineTo(width - margin.right, y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#888';
+        ctx.fillText(Math.round(quantity).toLocaleString(), margin.left - 5, y + 4);
+    }
+
+    // Draw spread indicator
+    if (prices.highest_buy && prices.lowest_sell) {
+        const buyX = priceToX(prices.highest_buy);
+        const sellX = priceToX(prices.lowest_sell);
+
+        // Vertical lines
+        ctx.strokeStyle = '#d4af37';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+
+        ctx.beginPath();
+        ctx.moveTo(buyX, margin.top);
+        ctx.lineTo(buyX, height - margin.bottom);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(sellX, margin.top);
+        ctx.lineTo(sellX, height - margin.bottom);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+
+        // Spread label
+        const midX = (buyX + sellX) / 2;
+        ctx.fillStyle = '#d4af37';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Spread: ${prices.spread_percent}%`, midX, margin.top - 10);
     }
 }

@@ -502,6 +502,40 @@
                 </div>
 
                 <div id="trading-result" class="result-container"></div>
+
+                <!-- Economic Analysis Section -->
+                <div id="tp-economic-analysis" class="tp-economic-section" style="display: none;">
+                    <h3>📊 Market Analysis</h3>
+
+                    <div class="economic-header">
+                        <div id="economic-item-info" class="economic-item-info"></div>
+                        <div id="economic-recommendation" class="economic-recommendation"></div>
+                    </div>
+
+                    <div class="economic-grid">
+                        <!-- Price Metrics -->
+                        <div class="economic-card">
+                            <h4>💰 Price Information</h4>
+                            <div id="economic-prices"></div>
+                        </div>
+
+                        <!-- Supply & Demand -->
+                        <div class="economic-card">
+                            <h4>📦 Supply & Demand</h4>
+                            <div id="economic-supply-demand"></div>
+                        </div>
+                    </div>
+
+                    <!-- Order Book Chart -->
+                    <div class="economic-chart-section">
+                        <h4>📈 Order Book Depth</h4>
+                        <canvas id="order-book-chart"></canvas>
+                        <div class="chart-legend" style="margin-top: 10px;">
+                            <span class="legend-item"><span class="legend-dot" style="background: #27ae60;"></span> Buy Orders</span>
+                            <span class="legend-item"><span class="legend-dot" style="background: #e74c3c;"></span> Sell Listings</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Custom Query Tab -->
