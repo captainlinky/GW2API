@@ -1277,6 +1277,35 @@ def get_items():
         }), 400
 
 
+@app.route('/api/proxy/maps/<int:map_id>')
+def get_map_proxy(map_id):
+    """
+    Proxy endpoint for GW2 maps API.
+
+    Returns map metadata including map_rect and continent_rect coordinates.
+    """
+    try:
+        client = GW2API()
+        maps = client.get_maps([map_id])
+
+        if not maps:
+            return jsonify({
+                'status': 'error',
+                'message': f'Map {map_id} not found'
+            }), 404
+
+        return jsonify({
+            'status': 'success',
+            'data': maps[0]
+        })
+    except Exception as e:
+        logger.error(f"Error fetching map {map_id}: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @app.route('/api/query', methods=['POST'])
 def custom_query():
     """Execute a custom API query."""

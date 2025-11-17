@@ -87,11 +87,14 @@ window.GW2Data = {
         console.log('Loading map meta for', mapId);
         const resp = await fetch(`/api/proxy/maps/${mapId}`);
         if (resp.ok) {
-            const data = await resp.json();
-            // Expecting { maps: [{id, map_rect, continent_rect}] } or pass-through array
+            const result = await resp.json();
+            // Handle backend response format: {status: 'success', data: {...}}
+            const data = result.status === 'success' ? result.data : result;
+            // Also support direct array or maps wrapper
             const map = Array.isArray(data) ? data[0] : (data.maps ? data.maps[0] : data);
             if (map && map.map_rect) {
                 this.mapsMeta[mapId] = { map_rect: map.map_rect, continent_rect: map.continent_rect };
+                console.log(`Map ${mapId} metadata loaded:`, this.mapsMeta[mapId]);
                 return this.mapsMeta[mapId];
             }
         }
