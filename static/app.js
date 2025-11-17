@@ -3616,10 +3616,15 @@ async function renderWarRoomMap(mapType) {
         if (bgUrls[mapType]) {
             const img = new Image();
             img.onload = () => {
+                console.log(`War Room: High-res background loaded for ${mapType}: ${bgUrls[mapType].high}`);
                 const bg = container.querySelector('#warroom-map-bg');
-                if (bg) bg.setAttribute('href', bgUrls[mapType].high);
+                if (bg) {
+                    bg.setAttribute('href', bgUrls[mapType].high);
+                    console.log(`War Room: Background swapped to high-res, dimensions: ${img.width}x${img.height}`);
+                }
             };
             img.onerror = () => {
+                console.warn(`War Room: High-res failed for ${mapType}, trying fallback`);
                 // Remote wiki fallback if local high-res missing
                 const fallback = {
                     'Center': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Eternal_Battlegrounds_map.jpg?width=2048',
@@ -3628,8 +3633,12 @@ async function renderWarRoomMap(mapType) {
                     'GreenHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Green_Alpine_Borderlands_map.jpg?width=2048'
                 };
                 const bg = container.querySelector('#warroom-map-bg');
-                if (bg && fallback[mapType]) bg.setAttribute('href', fallback[mapType]);
+                if (bg && fallback[mapType]) {
+                    bg.setAttribute('href', fallback[mapType]);
+                    console.log(`War Room: Using wiki fallback for ${mapType}`);
+                }
             };
+            console.log(`War Room: Loading high-res background: ${bgUrls[mapType].high}`);
             img.src = bgUrls[mapType].high;
         }
     } catch (e) {
