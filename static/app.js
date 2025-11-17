@@ -3507,9 +3507,9 @@ async function renderWarRoomMap(mapType) {
             const normalizedX = (mapX - mapMinX) / (mapMaxX - mapMinX);
             const normalizedY = (mapY - mapMinY) / (mapMaxY - mapMinY);
 
-            // Scale to canvas size (flip Y axis since SVG Y increases downward)
+            // Scale to canvas size (don't flip Y - map coords already match SVG orientation)
             x = normalizedX * config.width;
-            y = config.height - (normalizedY * config.height);
+            y = normalizedY * config.height;
 
             // Log first objective transformation for debugging
             if (!firstObjectiveLogged) {
