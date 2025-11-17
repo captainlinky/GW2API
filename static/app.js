@@ -3466,7 +3466,7 @@ async function renderWarRoomMap(mapType) {
 
     // Background image
     if (bgUrls[mapType]) {
-        html += `<image id="warroom-map-bg" href="${bgUrls[mapType].low}" width="${config.width}" height="${config.height}" preserveAspectRatio="none" opacity="0.85"/>`;
+        html += `<image id="warroom-map-bg" href="${bgUrls[mapType].low}" width="${config.width}" height="${config.height}" preserveAspectRatio="xMidYMid slice" opacity="0.85"/>`;
     } else {
         html += `<rect width="${config.width}" height="${config.height}" fill="#1a1a1a" stroke="#333" stroke-width="2"/>`;
     }
