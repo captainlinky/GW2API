@@ -3487,12 +3487,11 @@ async function renderWarRoomMap(mapType) {
 
             // Log first objective transformation for debugging
             if (!firstObjectiveLogged) {
-                console.log(`War Room: Sample transformation for ${objMeta.name}:`, {
-                    continentCoord: objMeta.coord,
-                    normalized: [normalizedX.toFixed(3), normalizedY.toFixed(3)],
-                    canvasCoord: [x.toFixed(1), y.toFixed(1)],
-                    canvasSize: [config.width, config.height]
-                });
+                console.log(`War Room: Sample transformation for ${objMeta.name}:`);
+                console.log(`  Continent coord: [${objMeta.coord[0]}, ${objMeta.coord[1]}]`);
+                console.log(`  Continent bounds: [${continentMinX}, ${continentMinY}] to [${continentMaxX}, ${continentMaxY}]`);
+                console.log(`  Normalized: [${normalizedX.toFixed(3)}, ${normalizedY.toFixed(3)}]`);
+                console.log(`  Canvas coord: [${x.toFixed(1)}, ${y.toFixed(1)}] (size: ${config.width}x${config.height})`);
                 firstObjectiveLogged = true;
             }
         } else {
@@ -3641,8 +3640,22 @@ async function refreshCaptureEvents() {
         warroomCaptureEvents.forEach(event => {
             const timeAgo = formatTimeAgo(event.minutes_ago || 0);
             const mapName = getMapName(event.map) || 'Unknown Map';
-            const objName = event.objective_name || 'Unknown Objective';
-            const objType = event.objective_type || 'Unknown';
+
+            // Look up objective name and type from metadata
+            let objName = event.objective_name || 'Unknown Objective';
+            let objType = event.objective_type || 'Unknown';
+
+            if (warroomObjectivesData && event.objective_id) {
+                // Find the map type from event.map
+                const mapType = event.map;
+                if (warroomObjectivesData[mapType]) {
+                    const objMeta = warroomObjectivesData[mapType][event.objective_id];
+                    if (objMeta) {
+                        objName = objMeta.name || objName;
+                        objType = objMeta.type || objType;
+                    }
+                }
+            }
 
             // Determine team color from objective owner
             let teamColor = '#888';
