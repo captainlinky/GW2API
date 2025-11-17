@@ -30,6 +30,7 @@
         <!-- Navigation -->
         <nav class="nav-tabs">
             <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+            <button class="nav-tab" data-tab="warroom">War Room</button>
             <button class="nav-tab" data-tab="account">Account</button>
             <button class="nav-tab" data-tab="characters">Characters</button>
             <button class="nav-tab" data-tab="trading">Trading Post</button>
@@ -306,6 +307,59 @@
                 <div id="dashboard-result" class="result-container"></div>
             </div>
 
+            <!-- War Room Tab -->
+            <div id="warroom" class="tab-content">
+                <h2>⚔️ War Room - Live Battlefield Command Center</h2>
+
+                <!-- Interactive Maps Section -->
+                <div class="warroom-maps-section">
+                    <h3>🗺️ Interactive Battlefield Maps</h3>
+                    <div class="map-controls">
+                        <div id="warroom-map-selector" class="map-selector"></div>
+                        <button onclick="initWarRoomMaps()" class="btn btn-primary">
+                            🔄 Load Interactive Maps
+                        </button>
+                        <label style="margin-left: 10px; display: inline-flex; align-items: center; gap: 6px;">
+                            <input id="warroom-toggle-grid" type="checkbox" checked onchange="renderWarRoomMap(window.warroomCurrentMapType)"/>
+                            Show grid
+                        </label>
+                        <button onclick="stopWarRoomAutoRefresh()" class="btn btn-small">⏸️ Pause</button>
+                        <button onclick="startWarRoomAutoRefresh()" class="btn btn-small">▶️ Resume</button>
+                    </div>
+
+                    <div class="warroom-map-container">
+                        <div id="warroom-map-canvas" class="map-canvas">
+                            <p style="text-align: center; padding: 50px; opacity: 0.6;">
+                                Click "Load Interactive Maps" to view live WvW battlefield status
+                            </p>
+                        </div>
+                        <div id="warroom-objective-details" class="objective-details-panel">
+                            <p style="opacity: 0.6; text-align: center; padding: 20px;">
+                                Click an objective on the map to view details
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Capture Events Feed -->
+                <div class="warroom-events-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin: 0;">📜 Recent Capture Events</h3>
+                        <button onclick="refreshCaptureEvents()" class="btn btn-small">🔄 Refresh Events</button>
+                    </div>
+                    <div class="events-feed-container">
+                        <div id="capture-events-feed" class="capture-events-feed">
+                            <p style="text-align: center; opacity: 0.6; padding: 40px;">
+                                Click "Load Interactive Maps" or "Refresh Events" to view recent captures
+                            </p>
+                        </div>
+                    </div>
+                    <div class="events-legend" style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 0.9em; color: #a0a0a0;">
+                        <strong style="color: #d4af37;">💡 Event Feed:</strong> Shows the last 24 hours of objective captures across all maps. Events update in real-time as objectives change hands.
+                    </div>
+                </div>
+            </div>
+
             <!-- Account Tab -->
             <div id="account" class="tab-content">
                 <h2>Account Information</h2>
@@ -448,6 +502,40 @@
                 </div>
 
                 <div id="trading-result" class="result-container"></div>
+
+                <!-- Economic Analysis Section -->
+                <div id="tp-economic-analysis" class="tp-economic-section" style="display: none;">
+                    <h3>📊 Market Analysis</h3>
+
+                    <div class="economic-header">
+                        <div id="economic-item-info" class="economic-item-info"></div>
+                        <div id="economic-recommendation" class="economic-recommendation"></div>
+                    </div>
+
+                    <div class="economic-grid">
+                        <!-- Price Metrics -->
+                        <div class="economic-card">
+                            <h4>💰 Price Information</h4>
+                            <div id="economic-prices"></div>
+                        </div>
+
+                        <!-- Supply & Demand -->
+                        <div class="economic-card">
+                            <h4>📦 Supply & Demand</h4>
+                            <div id="economic-supply-demand"></div>
+                        </div>
+                    </div>
+
+                    <!-- Order Book Chart -->
+                    <div class="economic-chart-section">
+                        <h4>📈 Order Book Depth</h4>
+                        <canvas id="order-book-chart"></canvas>
+                        <div class="chart-legend" style="margin-top: 10px;">
+                            <span class="legend-item"><span class="legend-dot" style="background: #27ae60;"></span> Buy Orders</span>
+                            <span class="legend-item"><span class="legend-dot" style="background: #e74c3c;"></span> Sell Listings</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Custom Query Tab -->

@@ -1055,6 +1055,201 @@ def get_tp_transactions(transaction_type):
         }), 400
 
 
+@app.route('/api/tp/economics/<int:item_id>')
+def get_tp_economics(item_id):
+    """
+    Get economic analysis for a Trading Post item.
+
+    Provides supply/demand analysis, price trends, and buy/sell recommendations.
+    """
+    try:
+        client = GW2API()
+
+        # Get detailed listings
+        listings_data = client.get_tp_listings([item_id])
+        if not listings_data:
+            return jsonify({
+                'status': 'error',
+                'message': f'No listings found for item {item_id}'
+            }), 404
+
+        listing = listings_data[0]
+
+        # Get item info
+        item_info = client.get_items([item_id])[0]
+
+        # Get basic prices
+        prices_data = client.get_tp_prices([item_id])
+        price_info = prices_data[0] if prices_data else {}
+
+        # Extract buy and sell orders
+        buy_orders = listing.get('buys', [])
+        sell_orders = listing.get('sells', [])
+
+        # Calculate economic metrics
+        total_buy_quantity = sum(order['quantity'] for order in buy_orders)
+        total_sell_quantity = sum(order['quantity'] for order in sell_orders)
+
+        # Get top prices
+        highest_buy = buy_orders[0]['unit_price'] if buy_orders else 0
+        lowest_sell = sell_orders[0]['unit_price'] if sell_orders else 0
+
+        # Calculate spread
+        spread = lowest_sell - highest_buy if (highest_buy and lowest_sell) else 0
+        spread_percent = (spread / lowest_sell * 100) if lowest_sell > 0 else 0
+
+        # Supply/Demand ratio
+        supply_demand_ratio = total_sell_quantity / total_buy_quantity if total_buy_quantity > 0 else float('inf')
+
+        # Market velocity (how many orders in top 10% of price range)
+        if buy_orders and sell_orders:
+            # Top buy orders (within 10% of highest buy)
+            buy_threshold = highest_buy * 0.9
+            active_buyers = sum(order['quantity'] for order in buy_orders if order['unit_price'] >= buy_threshold)
+
+            # Low sell orders (within 10% above lowest sell)
+            sell_threshold = lowest_sell * 1.1
+            active_sellers = sum(order['quantity'] for order in sell_orders if order['unit_price'] <= sell_threshold)
+
+            velocity = (active_buyers + active_sellers) / 2
+        else:
+            velocity = 0
+
+        # Calculate recommendation
+        recommendation = calculate_tp_recommendation(
+            spread_percent,
+            supply_demand_ratio,
+            velocity,
+            total_buy_quantity,
+            total_sell_quantity
+        )
+
+        # Prepare order book data for charts (top 20 of each)
+        buy_orders_chart = [
+            {
+                'price': order['unit_price'],
+                'quantity': order['quantity'],
+                'listings': order['listings']
+            }
+            for order in buy_orders[:20]
+        ]
+
+        sell_orders_chart = [
+            {
+                'price': order['unit_price'],
+                'quantity': order['quantity'],
+                'listings': order['listings']
+            }
+            for order in sell_orders[:20]
+        ]
+
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'item': {
+                    'id': item_id,
+                    'name': item_info.get('name', 'Unknown'),
+                    'icon': item_info.get('icon', ''),
+                    'rarity': item_info.get('rarity', 'Unknown')
+                },
+                'prices': {
+                    'highest_buy': highest_buy,
+                    'lowest_sell': lowest_sell,
+                    'spread': spread,
+                    'spread_percent': round(spread_percent, 2),
+                    'highest_buy_formatted': format_currency(highest_buy),
+                    'lowest_sell_formatted': format_currency(lowest_sell),
+                    'spread_formatted': format_currency(spread)
+                },
+                'supply_demand': {
+                    'total_buy_orders': total_buy_quantity,
+                    'total_sell_listings': total_sell_quantity,
+                    'ratio': round(supply_demand_ratio, 2),
+                    'velocity': round(velocity, 0)
+                },
+                'recommendation': recommendation,
+                'order_book': {
+                    'buys': buy_orders_chart,
+                    'sells': sell_orders_chart
+                }
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error getting TP economics for item {item_id}: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+def calculate_tp_recommendation(spread_percent, supply_demand_ratio, velocity, buy_qty, sell_qty):
+    """
+    Calculate buy/sell recommendation based on market conditions.
+
+    Returns a dict with recommendation type and reasoning.
+    """
+    reasons = []
+    score = 0  # Positive = buy opportunity, Negative = sell opportunity
+
+    # Analyze spread
+    if spread_percent < 5:
+        reasons.append("Very tight spread (< 5%) - competitive market")
+        score += 1  # Slightly favors buying (liquid market)
+    elif spread_percent > 15:
+        reasons.append(f"Wide spread ({spread_percent:.1f}%) - potential flip opportunity")
+        score -= 1  # Could flip
+
+    # Analyze supply/demand ratio
+    if supply_demand_ratio < 0.5:
+        reasons.append("Low supply vs demand - prices may rise")
+        score += 2  # Strong buy signal
+    elif supply_demand_ratio > 2:
+        reasons.append("High supply vs demand - prices may fall")
+        score -= 2  # Strong sell signal
+    elif 0.8 <= supply_demand_ratio <= 1.2:
+        reasons.append("Balanced supply and demand")
+
+    # Analyze velocity (market activity)
+    if velocity > 1000:
+        reasons.append("High market activity - very liquid")
+        score += 1
+    elif velocity < 100:
+        reasons.append("Low market activity - illiquid")
+        score -= 1
+
+    # Analyze absolute quantities
+    if buy_qty > 10000:
+        reasons.append("Strong buyer interest")
+        score += 1
+    if sell_qty > 10000:
+        reasons.append("Heavy selling pressure")
+        score -= 1
+
+    # Determine recommendation
+    if score >= 2:
+        recommendation_type = "STRONG BUY"
+        color = "#27ae60"
+    elif score == 1:
+        recommendation_type = "BUY"
+        color = "#6bff6b"
+    elif score == -1:
+        recommendation_type = "SELL"
+        color = "#ff9800"
+    elif score <= -2:
+        recommendation_type = "STRONG SELL"
+        color = "#e74c3c"
+    else:
+        recommendation_type = "HOLD"
+        color = "#d4af37"
+
+    return {
+        'type': recommendation_type,
+        'color': color,
+        'score': score,
+        'reasons': reasons
+    }
+
+
 @app.route('/api/items')
 def get_items():
     """Get item information."""
