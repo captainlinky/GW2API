@@ -3209,6 +3209,8 @@ let warroomObjectivesData = {};
 let warroomMatchData = null;
 let warroomAutoRefreshInterval = null;
 let warroomCaptureEvents = [];
+let warroomDebugMode = false;
+let warroomDebugAdjustments = {}; // Store manual position adjustments
 
 // Initialize War Room Maps
 async function initWarRoomMaps() {
@@ -3510,10 +3512,25 @@ async function renderWarRoomMap(mapType) {
         const size = getObjectiveSize(matchObj.type);
         const icon = getObjectiveIcon(matchObj.type);
 
-        html += `<g class="objective-marker"
+        // Store original calculated position for debug mode
+        const originalX = x;
+        const originalY = y;
+
+        // Apply debug adjustments if they exist
+        if (warroomDebugAdjustments[matchObj.id]) {
+            x = warroomDebugAdjustments[matchObj.id].newX;
+            y = warroomDebugAdjustments[matchObj.id].newY;
+        }
+
+        const cursorStyle = warroomDebugMode ? 'move' : 'pointer';
+        const dragHandlers = warroomDebugMode
+            ? `onmousedown="startDragObjective(event, '${matchObj.id}', ${x}, ${y}, ${originalX}, ${originalY}, '${objMeta.name}')"` : '';
+
+        html += `<g class="objective-marker" data-obj-id="${matchObj.id}"
                     onmouseover="showWarRoomTooltip(event, '${matchObj.id}')"
                     onmouseout="hideWarRoomTooltip()"
-                    style="cursor: pointer;">`;
+                    ${dragHandlers}
+                    style="cursor: ${cursorStyle};">`;
 
         if (matchObj.claimed_by) {
             html += `<circle cx="${x}" cy="${y}" r="${size + 3}" fill="${color}" opacity="0.3"/>`;
@@ -3742,6 +3759,154 @@ function stopWarRoomAutoRefresh() {
         warroomAutoRefreshInterval = null;
         console.log('War Room: Auto-refresh stopped');
     }
+}
+
+// War Room Debug Mode - Drag functionality
+let dragState = null;
+
+function startDragObjective(event, objId, currentX, currentY, originalX, originalY, objName) {
+    if (!warroomDebugMode) return;
+
+    event.stopPropagation();
+
+    const svg = event.target.closest('svg');
+    const svgRect = svg.getBoundingClientRect();
+
+    dragState = {
+        objId,
+        objName,
+        originalX,
+        originalY,
+        startMouseX: event.clientX,
+        startMouseY: event.clientY,
+        startObjX: currentX,
+        startObjY: currentY,
+        svg,
+        svgRect
+    };
+
+    console.log(`War Room Debug: Started dragging ${objName}`);
+
+    // Add event listeners
+    document.addEventListener('mousemove', dragObjective);
+    document.addEventListener('mouseup', stopDragObjective);
+}
+
+function dragObjective(event) {
+    if (!dragState) return;
+
+    const deltaX = event.clientX - dragState.startMouseX;
+    const deltaY = event.clientY - dragState.startMouseY;
+
+    const newX = dragState.startObjX + deltaX;
+    const newY = dragState.startObjY + deltaY;
+
+    // Find the objective marker and update its position
+    const marker = document.querySelector(`g.objective-marker[data-obj-id="${dragState.objId}"]`);
+    if (marker) {
+        const circles = marker.querySelectorAll('circle');
+        const text = marker.querySelector('text');
+
+        circles.forEach(circle => {
+            circle.setAttribute('cx', newX);
+            circle.setAttribute('cy', newY);
+        });
+
+        if (text) {
+            text.setAttribute('x', newX);
+            text.setAttribute('y', newY);
+        }
+    }
+}
+
+function stopDragObjective(event) {
+    if (!dragState) return;
+
+    const deltaX = event.clientX - dragState.startMouseX;
+    const deltaY = event.clientY - dragState.startMouseY;
+
+    const newX = dragState.startObjX + deltaX;
+    const newY = dragState.startObjY + deltaY;
+
+    const offsetX = newX - dragState.originalX;
+    const offsetY = newY - dragState.originalY;
+
+    // Store the adjustment
+    warroomDebugAdjustments[dragState.objId] = {
+        name: dragState.objName,
+        originalX: dragState.originalX,
+        originalY: dragState.originalY,
+        newX,
+        newY,
+        offsetX,
+        offsetY
+    };
+
+    console.log(`War Room Debug: Adjusted ${dragState.objName} by [${offsetX.toFixed(1)}, ${offsetY.toFixed(1)}]`);
+
+    // Clean up
+    document.removeEventListener('mousemove', dragObjective);
+    document.removeEventListener('mouseup', stopDragObjective);
+    dragState = null;
+}
+
+// War Room Debug Mode
+function toggleWarRoomDebugMode() {
+    const checkbox = document.getElementById('warroom-debug-mode');
+    const statsBtn = document.getElementById('show-debug-stats');
+
+    warroomDebugMode = checkbox.checked;
+
+    if (warroomDebugMode) {
+        console.log('War Room: Debug mode ENABLED - objectives are draggable');
+        statsBtn.style.display = 'inline-block';
+        // Reset adjustments when entering debug mode
+        warroomDebugAdjustments = {};
+    } else {
+        console.log('War Room: Debug mode DISABLED');
+        statsBtn.style.display = 'none';
+    }
+
+    // Re-render map to apply debug mode
+    renderWarRoomMap(warroomCurrentMapType);
+}
+
+function showDebugStats() {
+    if (Object.keys(warroomDebugAdjustments).length === 0) {
+        alert('No objectives have been repositioned yet.\n\nEnable Debug Mode and drag objectives to their correct positions on the map.');
+        return;
+    }
+
+    // Calculate average offset
+    let totalOffsetX = 0;
+    let totalOffsetY = 0;
+    let count = 0;
+
+    let details = 'Objective Position Adjustments:\n\n';
+
+    for (const [objId, adjustment] of Object.entries(warroomDebugAdjustments)) {
+        details += `${adjustment.name}:\n`;
+        details += `  Offset: X=${adjustment.offsetX.toFixed(1)}px, Y=${adjustment.offsetY.toFixed(1)}px\n`;
+        details += `  Original: [${adjustment.originalX.toFixed(1)}, ${adjustment.originalY.toFixed(1)}]\n`;
+        details += `  Corrected: [${adjustment.newX.toFixed(1)}, ${adjustment.newY.toFixed(1)}]\n\n`;
+
+        totalOffsetX += adjustment.offsetX;
+        totalOffsetY += adjustment.offsetY;
+        count++;
+    }
+
+    const avgOffsetX = totalOffsetX / count;
+    const avgOffsetY = totalOffsetY / count;
+
+    details += `AVERAGE OFFSET:\n`;
+    details += `  X: ${avgOffsetX.toFixed(1)}px\n`;
+    details += `  Y: ${avgOffsetY.toFixed(1)}px\n\n`;
+    details += `Total objectives adjusted: ${count}\n\n`;
+    details += `Share these offset values to help fix the coordinate transformation!`;
+
+    alert(details);
+    console.log('War Room Debug Adjustments:', warroomDebugAdjustments);
+    console.log('Average offset:', { x: avgOffsetX, y: avgOffsetY, count });
 }
 
 // ============================================================================
