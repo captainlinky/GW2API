@@ -3213,8 +3213,7 @@ async function initWarRoomMaps() {
         warroomObjectivesData = await window.GW2Data.getObjectivesMetadata();
 
         console.log('War Room: Loading match data...');
-        const worldId = await getConfiguredWorldId();
-        warroomMatchData = await window.GW2Data.getMatchData(worldId);
+        warroomMatchData = await window.GW2Data.getMatchData(1020);
 
         // Organize objectives by map
         if (warroomMatchData) {
@@ -3519,8 +3518,7 @@ async function refreshCaptureEvents() {
     try {
         feedContainer.innerHTML = '<p style="text-align: center; padding: 20px;"><span class="loading"></span> Loading capture events...</p>';
 
-        const worldId = await getConfiguredWorldId();
-        const response = await fetch(`/api/wvw/activity/${worldId}`);
+        const response = await fetch(`/api/wvw/activity/1020`);
         const data = await response.json();
 
         if (data.status !== 'success') {
@@ -3609,8 +3607,7 @@ function startWarRoomAutoRefresh(intervalSeconds = 30) {
 
     warroomAutoRefreshInterval = setInterval(async () => {
         try {
-            const worldId = await getConfiguredWorldId();
-            warroomMatchData = await window.GW2Data.getMatchData(worldId, true);
+            warroomMatchData = await window.GW2Data.getMatchData(1020, true);
 
             if (warroomMatchData) {
                 warroomMapObjectives = {};
