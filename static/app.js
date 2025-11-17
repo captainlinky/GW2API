@@ -2065,21 +2065,35 @@ async function checkApiStatus() {
     try {
         const response = await fetch('/api/status');
         const data = await response.json();
-        
+
         const badge = document.getElementById('account-badge');
         if (data.status === 'success') {
+            // API key is valid and working
             badge.innerHTML = `✓ ${data.account_name}`;
             badge.style.background = 'rgba(76, 175, 80, 0.2)';
             badge.style.color = '#4caf50';
+        } else if (data.has_key) {
+            // API key exists but call failed (rate limit, network error, invalid key)
+            badge.innerHTML = '⚠ API Error';
+            badge.style.background = 'rgba(244, 67, 54, 0.2)';
+            badge.style.color = '#f44336';
+            badge.title = data.message || 'API request failed';
         } else {
+            // No API key configured
             badge.innerHTML = '⚠ No API Key';
             badge.style.background = 'rgba(255, 152, 0, 0.2)';
             badge.style.color = '#ff9800';
         }
-        
+
         updateKeyStatus();
     } catch (error) {
         console.error('Error checking API status:', error);
+        const badge = document.getElementById('account-badge');
+        if (badge) {
+            badge.innerHTML = '⚠ Connection Error';
+            badge.style.background = 'rgba(158, 158, 158, 0.2)';
+            badge.style.color = '#9e9e9e';
+        }
     }
 }
 
