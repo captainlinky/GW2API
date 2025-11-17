@@ -3523,10 +3523,12 @@ async function renderWarRoomMap(mapType) {
         }
 
         const cursorStyle = warroomDebugMode ? 'move' : 'pointer';
+        const escapedName = objMeta.name.replace(/'/g, "\\'").replace(/"/g, '\\"');
         const dragHandlers = warroomDebugMode
-            ? `onmousedown="startDragObjective(event, '${matchObj.id}', ${x}, ${y}, ${originalX}, ${originalY}, '${objMeta.name}')"` : '';
+            ? `onmousedown="startDragObjective(event, '${matchObj.id}', ${x}, ${y}, ${originalX}, ${originalY}, '${escapedName}')"` : '';
 
         html += `<g class="objective-marker" data-obj-id="${matchObj.id}"
+                    data-obj-name="${escapedName}"
                     onmouseover="showWarRoomTooltip(event, '${matchObj.id}')"
                     onmouseout="hideWarRoomTooltip()"
                     ${dragHandlers}
