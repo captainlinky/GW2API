@@ -2348,6 +2348,8 @@ async function loadCharacterList() {
         const response = await fetch('/api/characters');
         const data = await response.json();
 
+        console.log('Characters API response:', data);
+
         if (data.status === 'success') {
             let html = '<h3>Select a Character</h3><div class="character-grid">';
 
@@ -3419,22 +3421,35 @@ async function displayInventoryItems(items, title) {
             return;
         }
 
+        // Filter to only items with valid price data
+        const tradeableItemIds = new Set((pricesData.data || []).map(p => p.id));
+        const filteredItemMap = new Map();
+        itemMap.forEach((value, key) => {
+            if (tradeableItemIds.has(key)) {
+                filteredItemMap.set(key, value);
+            }
+        });
+
         // Build display
         let html = '<div class="query-results">';
         html += '<h3>' + title + '</h3>';
-        html += '<div style="margin-bottom: 10px;"><strong>Total Items:</strong> ' + itemMap.size + ' types, ' + items.reduce((sum, i) => sum + i.count, 0) + ' total</div>';
+        const totalTradeable = Array.from(filteredItemMap.values()).reduce((sum, item) => sum + item.count, 0);
+        html += '<div style="margin-bottom: 10px;"><strong>Tradeable Items:</strong> ' + filteredItemMap.size + ' types, ' + totalTradeable + ' total</div>';
 
         // Create item list
-        itemMap.forEach((itemData, itemId) => {
+        filteredItemMap.forEach((itemData, itemId) => {
             const itemInfo = itemsData.data.find(i => i.id === itemId);
             const priceInfo = pricesData.data.find(p => p.id === itemId);
 
-            if (!itemInfo) return;
+            if (!itemInfo || !priceInfo) return;
 
             const itemName = itemInfo.name || 'Unknown Item';
             const rarity = itemInfo.rarity || 'Common';
             const sellPrice = priceInfo && priceInfo.sells ? priceInfo.sells.unit_price : 0;
             const buyPrice = priceInfo && priceInfo.buys ? priceInfo.buys.unit_price : 0;
+
+            // Skip items without sell prices
+            if (!sellPrice || sellPrice <= 0) return;
 
             const totalSellValue = sellPrice * itemData.count;
             const recommendation = calculateRecommendation(sellPrice, buyPrice, priceInfo);
