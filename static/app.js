@@ -3470,9 +3470,9 @@ async function renderWarRoomMap(mapType) {
     // Create SVG map
     let html = `<svg class="wvw-map-svg" viewBox="0 0 ${config.width} ${config.height}">`;
 
-    // Background image - use xMidYMid slice to fill canvas, cropping overflow
+    // Background image - stretch to fill entire canvas (eliminates gray areas)
     if (bgUrls[mapType]) {
-        html += `<image id="warroom-map-bg" x="0" y="0" href="${bgUrls[mapType].low}" width="${config.width}" height="${config.height}" preserveAspectRatio="xMidYMid slice" opacity="0.85"/>`;
+        html += `<image id="warroom-map-bg" x="0" y="0" href="${bgUrls[mapType].low}" width="${config.width}" height="${config.height}" preserveAspectRatio="none" opacity="0.85"/>`;
     } else {
         html += `<rect width="${config.width}" height="${config.height}" fill="#1a1a1a" stroke="#333" stroke-width="2"/>`;
     }
