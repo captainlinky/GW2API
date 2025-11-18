@@ -3431,54 +3431,49 @@ async function renderWarRoomMap(mapType) {
         } catch (e) { return false; }
     })();
 
+    // Use GW2 Wiki images (full coverage) instead of local cropped images
     const bgUrls = {
         'Center': {
-            low: SUPPORTS_WEBP ? '/static/maps/eb_512.webp' : '/static/maps/eb_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/eb_2048.webp' : '/static/maps/eb_2048.jpg'
+            low: 'https://wiki.guildwars2.com/images/c/c4/Eternal_Battlegrounds_map.jpg',
+            high: 'https://wiki.guildwars2.com/images/c/c4/Eternal_Battlegrounds_map.jpg'
         },
         'RedHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/red_bl_512.webp' : '/static/maps/red_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/red_bl_2048.webp' : '/static/maps/red_bl_2048.jpg'
+            low: 'https://wiki.guildwars2.com/images/8/88/Red_Desert_Borderlands_map.jpg',
+            high: 'https://wiki.guildwars2.com/images/8/88/Red_Desert_Borderlands_map.jpg'
         },
         'BlueHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/blue_bl_512.webp' : '/static/maps/blue_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/blue_bl_2048.webp' : '/static/maps/blue_bl_2048.jpg'
+            low: 'https://wiki.guildwars2.com/images/f/f7/Blue_Alpine_Borderlands_map.jpg',
+            high: 'https://wiki.guildwars2.com/images/f/f7/Blue_Alpine_Borderlands_map.jpg'
         },
         'GreenHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/green_bl_512.webp' : '/static/maps/green_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/green_bl_2048.webp' : '/static/maps/green_bl_2048.jpg'
+            low: 'https://wiki.guildwars2.com/images/4/4c/Green_Alpine_Borderlands_map.jpg',
+            high: 'https://wiki.guildwars2.com/images/4/4c/Green_Alpine_Borderlands_map.jpg'
         }
     };
 
-    // Background image actual dimensions (these images are cropped to playable areas)
-    const bgImageDimensions = {
-        'Center': { width: 3850, height: 3833 },        // EB nearly square
-        'RedHome': { width: 3228, height: 3245 },       // Desert BL nearly square
-        'BlueHome': { width: 2662, height: 3625 },      // Alpine BL tall
-        'GreenHome': { width: 2692, height: 3637 }      // Alpine BL tall
-    };
-
-    // Size canvas to match background image aspect ratio (not map_rect)
-    if (bgImageDimensions[mapType]) {
-        const imgDims = bgImageDimensions[mapType];
-        const imgAspect = imgDims.height / imgDims.width;
+    // Size canvas based on map_rect coordinate system
+    if (useProperTransform && mapMeta && mapMeta.map_rect) {
+        const mapRect = mapMeta.map_rect;
+        const mapWidth = mapRect[1][0] - mapRect[0][0];
+        const mapHeight = mapRect[1][1] - mapRect[0][1];
+        const aspectRatio = mapHeight / mapWidth;
 
         const targetWidth = 2048;
         config = {
             ...config,
             width: targetWidth,
-            height: Math.round(targetWidth * imgAspect)
+            height: Math.round(targetWidth * aspectRatio)
         };
 
-        console.log(`War Room: Canvas sized to match background image for ${mapType}: ${config.width}x${config.height} (image: ${imgDims.width}x${imgDims.height}, aspect: ${imgAspect.toFixed(3)}:1)`);
+        console.log(`War Room: Canvas sized from map_rect for ${mapType}: ${config.width}x${config.height} (aspect: ${aspectRatio.toFixed(3)}:1)`);
     }
 
     // Create SVG map
     let html = `<svg class="wvw-map-svg" viewBox="0 0 ${config.width} ${config.height}">`;
 
-    // Background image - stretch to fill entire canvas (eliminates gray areas)
+    // Background image - center and fit within canvas (images are cropped to playable areas)
     if (bgUrls[mapType]) {
-        html += `<image id="warroom-map-bg" x="0" y="0" href="${bgUrls[mapType].low}" width="${config.width}" height="${config.height}" preserveAspectRatio="none" opacity="0.85"/>`;
+        html += `<image id="warroom-map-bg" x="0" y="0" href="${bgUrls[mapType].low}" width="${config.width}" height="${config.height}" preserveAspectRatio="xMidYMin meet" opacity="0.85"/>`;
     } else {
         html += `<rect width="${config.width}" height="${config.height}" fill="#1a1a1a" stroke="#333" stroke-width="2"/>`;
     }
@@ -3629,19 +3624,7 @@ async function renderWarRoomMap(mapType) {
                 }
             };
             img.onerror = () => {
-                console.warn(`War Room: High-res failed for ${mapType}, trying fallback`);
-                // Remote wiki fallback if local high-res missing
-                const fallback = {
-                    'Center': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Eternal_Battlegrounds_map.jpg?width=2048',
-                    'RedHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Red_Desert_Borderlands_map.jpg?width=2048',
-                    'BlueHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Blue_Alpine_Borderlands_map.jpg?width=2048',
-                    'GreenHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Green_Alpine_Borderlands_map.jpg?width=2048'
-                };
-                const bg = container.querySelector('#warroom-map-bg');
-                if (bg && fallback[mapType]) {
-                    bg.setAttribute('href', fallback[mapType]);
-                    console.log(`War Room: Using wiki fallback for ${mapType}`);
-                }
+                console.error(`War Room: Failed to load background for ${mapType} from wiki`);
             };
             console.log(`War Room: Loading high-res background: ${bgUrls[mapType].high}`);
             img.src = bgUrls[mapType].high;
