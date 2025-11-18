@@ -3453,14 +3453,20 @@ async function displayInventoryItems(items, title) {
 
             const itemName = itemInfo.name || 'Unknown Item';
             const rarity = itemInfo.rarity || 'Common';
-            const sellPrice = priceInfo && priceInfo.sells ? priceInfo.sells.unit_price : 0;
-            const buyPrice = priceInfo && priceInfo.buys ? priceInfo.buys.unit_price : 0;
+            const sellPrice = priceInfo ? priceInfo.sell_price : 0;
+            const buyPrice = priceInfo ? priceInfo.buy_price : 0;
 
             // Skip items without sell prices
             if (!sellPrice || sellPrice <= 0) return;
 
             const totalSellValue = sellPrice * itemData.count;
-            const recommendation = calculateRecommendation(sellPrice, buyPrice, priceInfo);
+
+            // Build priceInfo object for recommendation function
+            const priceInfoForCalc = {
+                sells: { unit_price: sellPrice, quantity: priceInfo.sell_quantity || 0 },
+                buys: { unit_price: buyPrice, quantity: priceInfo.buy_quantity || 0 }
+            };
+            const recommendation = calculateRecommendation(sellPrice, buyPrice, priceInfoForCalc);
 
             // Format prices
             const formatGold = (copper) => {
