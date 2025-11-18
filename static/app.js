@@ -3348,33 +3348,56 @@ async function loadCharacterInventory() {
 
 async function loadBankInventory() {
     const displayDiv = document.getElementById('inventory-display');
-    displayDiv.innerHTML = '<p>Loading bank...</p>';
+    displayDiv.innerHTML = '<p>Loading bank and material storage...</p>';
 
     try {
-        const response = await fetch('/api/bank');
-        const data = await response.json();
+        // Load both bank and materials in parallel
+        const [bankResponse, materialsResponse] = await Promise.all([
+            fetch('/api/bank'),
+            fetch('/api/materials')
+        ]);
 
-        if (data.status === 'success' && data.data) {
+        const bankData = await bankResponse.json();
+        const materialsData = await materialsResponse.json();
+
+        if (bankData.status === 'success' && materialsData.status === 'success') {
             const allItems = [];
 
-            data.data.forEach((slot, slotIndex) => {
-                if (slot && slot.id) {
-                    allItems.push({
-                        id: slot.id,
-                        count: slot.count || 1,
-                        location: 'Bank - Slot ' + (slotIndex + 1)
-                    });
-                }
-            });
+            // Add bank items
+            if (bankData.data) {
+                bankData.data.forEach((slot, slotIndex) => {
+                    if (slot && slot.id) {
+                        allItems.push({
+                            id: slot.id,
+                            count: slot.count || 1,
+                            location: 'Bank - Slot ' + (slotIndex + 1)
+                        });
+                    }
+                });
+            }
+
+            // Add material storage items
+            if (materialsData.data) {
+                materialsData.data.forEach(item => {
+                    if (item && item.id && item.count > 0) {
+                        allItems.push({
+                            id: item.id,
+                            count: item.count,
+                            location: 'Material Storage'
+                        });
+                    }
+                });
+            }
 
             if (allItems.length > 0) {
-                await displayInventoryItems(allItems, 'Account Bank');
+                await displayInventoryItems(allItems, 'Account Bank & Material Storage');
             } else {
-                displayDiv.innerHTML = '<p>No items found in bank.</p>';
+                displayDiv.innerHTML = '<p>No items found in bank or material storage.</p>';
             }
         } else {
             // Check if it's a 403 error (no API key)
-            if (data.message && data.message.includes('403')) {
+            const errorMessage = bankData.message || materialsData.message || 'Failed to load data';
+            if (errorMessage.includes('403')) {
                 displayDiv.innerHTML = `
                     <div class="status-message status-error">
                         <h3>🔑 API Key Required</h3>
@@ -3385,7 +3408,7 @@ async function loadBankInventory() {
                     </div>
                 `;
             } else {
-                displayDiv.innerHTML = '<p>Error: ' + (data.message || 'Failed to load bank data') + '</p>';
+                displayDiv.innerHTML = '<p>Error: ' + errorMessage + '</p>';
             }
         }
     } catch (error) {
