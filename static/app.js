@@ -3455,11 +3455,16 @@ async function displayInventoryItems(items, title) {
         // Filter to only items with valid price data
         const tradeableItemIds = new Set((pricesData.data || []).map(p => p.id));
         const filteredItemMap = new Map();
+        let skippedCount = 0;
         itemMap.forEach((value, key) => {
             if (tradeableItemIds.has(key)) {
                 filteredItemMap.set(key, value);
+            } else {
+                skippedCount++;
             }
         });
+
+        console.log(`Filtering: ${itemMap.size} total items, ${filteredItemMap.size} tradeable, ${skippedCount} non-tradeable`);
 
         // Build display
         let html = '<div class="query-results">';
@@ -3468,11 +3473,16 @@ async function displayInventoryItems(items, title) {
         html += '<div style="margin-bottom: 10px;"><strong>Tradeable Items:</strong> ' + filteredItemMap.size + ' types, ' + totalTradeable + ' total</div>';
 
         // Create item list
+        let displayedCount = 0;
+        let skippedNoPrice = 0;
         filteredItemMap.forEach((itemData, itemId) => {
             const itemInfo = itemsData.data.find(i => i.id === itemId);
             const priceInfo = pricesData.data.find(p => p.id === itemId);
 
-            if (!itemInfo || !priceInfo) return;
+            if (!itemInfo || !priceInfo) {
+                console.log(`Skipping item ${itemId}: missing info or price data`);
+                return;
+            }
 
             const itemName = itemInfo.name || 'Unknown Item';
             const rarity = itemInfo.rarity || 'Common';
@@ -3480,7 +3490,12 @@ async function displayInventoryItems(items, title) {
             const buyPrice = priceInfo ? priceInfo.buy_price : 0;
 
             // Skip items without sell prices
-            if (!sellPrice || sellPrice <= 0) return;
+            if (!sellPrice || sellPrice <= 0) {
+                console.log(`Skipping ${itemName}: no sell price (${sellPrice})`);
+                skippedNoPrice++;
+                return;
+            }
+            displayedCount++;
 
             const totalSellValue = sellPrice * itemData.count;
 
@@ -3535,6 +3550,8 @@ async function displayInventoryItems(items, title) {
 
             html += '</div>';
         });
+
+        console.log(`Display summary: ${displayedCount} items shown, ${skippedNoPrice} skipped (no sell price)`);
 
         html += '</div>';
         displayDiv.innerHTML = html;
