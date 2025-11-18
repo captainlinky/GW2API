@@ -3437,15 +3437,37 @@ async function displayInventoryItems(items, title) {
     });
 
     // Get item IDs for batch lookup
-    const itemIds = Array.from(itemMap.keys()).join(',');
+    const allItemIds = Array.from(itemMap.keys());
 
     try {
-        // Fetch item details and prices
-        const itemsResponse = await fetch('/api/items?ids=' + itemIds);
-        const itemsData = await itemsResponse.json();
+        // Batch requests to avoid URL length limits (max ~200 IDs per request)
+        const batchSize = 200;
+        const itemBatches = [];
+        for (let i = 0; i < allItemIds.length; i += batchSize) {
+            itemBatches.push(allItemIds.slice(i, i + batchSize));
+        }
 
-        const pricesResponse = await fetch('/api/tp/prices?ids=' + itemIds);
-        const pricesData = await pricesResponse.json();
+        console.log(`Fetching item data in ${itemBatches.length} batches`);
+
+        // Fetch all batches in parallel
+        const itemsPromises = itemBatches.map(batch =>
+            fetch('/api/items?ids=' + batch.join(',')).then(r => r.json())
+        );
+        const pricesPromises = itemBatches.map(batch =>
+            fetch('/api/tp/prices?ids=' + batch.join(',')).then(r => r.json())
+        );
+
+        const [itemsResults, pricesResults] = await Promise.all([
+            Promise.all(itemsPromises),
+            Promise.all(pricesPromises)
+        ]);
+
+        // Combine results from all batches
+        const allItems = itemsResults.flatMap(result => result.status === 'success' ? result.data : []);
+        const allPrices = pricesResults.flatMap(result => result.status === 'success' ? result.data : []);
+
+        const itemsData = { status: 'success', data: allItems };
+        const pricesData = { status: 'success', data: allPrices };
 
         if (itemsData.status !== 'success' || pricesData.status !== 'success') {
             displayDiv.innerHTML = '<p>Error loading item data</p>';
@@ -3629,14 +3651,14 @@ async function showInventoryTooltip(event, itemId) {
             if (priceInfo.buy_price) {
                 html += '<div style="margin-bottom: 5px;">';
                 html += '<strong>Buy Orders:</strong> ' + (priceInfo.buy_quantity || 0) + ' @ ';
-                html += formatCopper(priceInfo.buy_price);
+                html += formatCurrency(priceInfo.buy_price);
                 html += '</div>';
             }
 
             if (priceInfo.sell_price) {
                 html += '<div style="margin-bottom: 5px;">';
                 html += '<strong>Sell Listings:</strong> ' + (priceInfo.sell_quantity || 0) + ' @ ';
-                html += formatCopper(priceInfo.sell_price);
+                html += formatCurrency(priceInfo.sell_price);
                 html += '</div>';
             }
 
