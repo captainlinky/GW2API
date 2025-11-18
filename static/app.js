@@ -3431,23 +3431,24 @@ async function renderWarRoomMap(mapType) {
         } catch (e) { return false; }
     })();
 
-    // Use GW2 Wiki images (full coverage) instead of local cropped images
+    // Local background images (cropped to playable areas)
+    // Note: Images show playable areas only; gray areas represent out-of-bounds map_rect space
     const bgUrls = {
         'Center': {
-            low: 'https://wiki.guildwars2.com/images/c/c4/Eternal_Battlegrounds_map.jpg',
-            high: 'https://wiki.guildwars2.com/images/c/c4/Eternal_Battlegrounds_map.jpg'
+            low: SUPPORTS_WEBP ? '/static/maps/eb_512.webp' : '/static/maps/eb_512.jpg',
+            high: SUPPORTS_WEBP ? '/static/maps/eb_2048.webp' : '/static/maps/eb_2048.jpg'
         },
         'RedHome': {
-            low: 'https://wiki.guildwars2.com/images/8/88/Red_Desert_Borderlands_map.jpg',
-            high: 'https://wiki.guildwars2.com/images/8/88/Red_Desert_Borderlands_map.jpg'
+            low: SUPPORTS_WEBP ? '/static/maps/red_bl_512.webp' : '/static/maps/red_bl_512.jpg',
+            high: SUPPORTS_WEBP ? '/static/maps/red_bl_2048.webp' : '/static/maps/red_bl_2048.jpg'
         },
         'BlueHome': {
-            low: 'https://wiki.guildwars2.com/images/f/f7/Blue_Alpine_Borderlands_map.jpg',
-            high: 'https://wiki.guildwars2.com/images/f/f7/Blue_Alpine_Borderlands_map.jpg'
+            low: SUPPORTS_WEBP ? '/static/maps/blue_bl_512.webp' : '/static/maps/blue_bl_512.jpg',
+            high: SUPPORTS_WEBP ? '/static/maps/blue_bl_2048.webp' : '/static/maps/blue_bl_2048.jpg'
         },
         'GreenHome': {
-            low: 'https://wiki.guildwars2.com/images/4/4c/Green_Alpine_Borderlands_map.jpg',
-            high: 'https://wiki.guildwars2.com/images/4/4c/Green_Alpine_Borderlands_map.jpg'
+            low: SUPPORTS_WEBP ? '/static/maps/green_bl_512.webp' : '/static/maps/green_bl_512.jpg',
+            high: SUPPORTS_WEBP ? '/static/maps/green_bl_2048.webp' : '/static/maps/green_bl_2048.jpg'
         }
     };
 
@@ -3624,7 +3625,7 @@ async function renderWarRoomMap(mapType) {
                 }
             };
             img.onerror = () => {
-                console.error(`War Room: Failed to load background for ${mapType} from wiki`);
+                console.error(`War Room: Failed to load high-res background for ${mapType}`);
             };
             console.log(`War Room: Loading high-res background: ${bgUrls[mapType].high}`);
             img.src = bgUrls[mapType].high;
