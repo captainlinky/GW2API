@@ -3586,17 +3586,17 @@ async function showInventoryTooltip(event, itemId) {
             let html = '<div>';
             html += '<div style="font-weight: bold; margin-bottom: 10px;">Market Data</div>';
 
-            if (priceInfo.buys) {
+            if (priceInfo.buy_price) {
                 html += '<div style="margin-bottom: 5px;">';
-                html += '<strong>Buy Orders:</strong> ' + priceInfo.buys.quantity + ' @ ';
-                html += formatCopper(priceInfo.buys.unit_price);
+                html += '<strong>Buy Orders:</strong> ' + (priceInfo.buy_quantity || 0) + ' @ ';
+                html += formatCopper(priceInfo.buy_price);
                 html += '</div>';
             }
 
-            if (priceInfo.sells) {
+            if (priceInfo.sell_price) {
                 html += '<div style="margin-bottom: 5px;">';
-                html += '<strong>Sell Listings:</strong> ' + priceInfo.sells.quantity + ' @ ';
-                html += formatCopper(priceInfo.sells.unit_price);
+                html += '<strong>Sell Listings:</strong> ' + (priceInfo.sell_quantity || 0) + ' @ ';
+                html += formatCopper(priceInfo.sell_price);
                 html += '</div>';
             }
 
