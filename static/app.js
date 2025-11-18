@@ -3426,8 +3426,8 @@ async function displayInventoryItems(items, title) {
 
         // Create item list
         itemMap.forEach((itemData, itemId) => {
-            const itemInfo = itemsData.items.find(i => i.id === itemId);
-            const priceInfo = pricesData.prices.find(p => p.id === itemId);
+            const itemInfo = itemsData.data.find(i => i.id === itemId);
+            const priceInfo = pricesData.data.find(p => p.id === itemId);
 
             if (!itemInfo) return;
 
