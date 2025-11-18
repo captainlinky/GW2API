@@ -2530,8 +2530,15 @@ function switchTPView(view) {
     document.querySelectorAll('.tp-view').forEach(v => v.classList.remove('active'));
     document.getElementById(`tp-view-${view}`).classList.add('active');
 
-    // Clear results when switching views
-    document.getElementById('trading-result').innerHTML = '';
+    // Clear results when switching views (except for inventory view)
+    if (view !== 'inventory') {
+        document.getElementById('trading-result').innerHTML = '';
+    }
+
+    // Load data for inventory view if needed
+    if (view === 'inventory') {
+        loadInventoryCharacters();
+    }
 }
 
 // Load trading post transactions
@@ -3196,6 +3203,432 @@ function showTeamGuilds(team, event) {
         const teamDiv = document.getElementById(`team-${color}-guilds`);
         teamDiv.style.display = color === team ? 'block' : 'none';
     });
+}
+
+// ============================================================================
+// Trading Post - Inventory & Bank Viewer
+// ============================================================================
+
+async function loadInventoryCharacters() {
+    const selectElement = document.getElementById('inventory-character-select');
+    if (!selectElement) return;
+
+    try {
+        const response = await fetch('/api/characters');
+        const data = await response.json();
+
+        if (data.status === 'success' && data.characters) {
+            selectElement.innerHTML = '<option value="">Select a character...</option>';
+            data.characters.forEach(charName => {
+                const option = document.createElement('option');
+                option.value = charName;
+                option.textContent = charName;
+                selectElement.appendChild(option);
+            });
+        } else {
+            selectElement.innerHTML = '<option value="">Error loading characters</option>';
+        }
+    } catch (error) {
+        console.error('Error loading characters:', error);
+        selectElement.innerHTML = '<option value="">Error loading characters</option>';
+    }
+}
+
+async function loadCharacterInventory() {
+    const selectElement = document.getElementById('inventory-character-select');
+    const characterName = selectElement.value;
+
+    if (!characterName) {
+        alert('Please select a character first');
+        return;
+    }
+
+    const displayDiv = document.getElementById('inventory-display');
+    displayDiv.innerHTML = '<p>Loading inventory for ' + characterName + '...</p>';
+
+    try {
+        // Encode character name for URL
+        const encodedName = encodeURIComponent(characterName);
+        const response = await fetch('/api/character/' + encodedName);
+        const data = await response.json();
+
+        if (data.status === 'success' && data.character) {
+            const bags = data.character.bags || [];
+            const allItems = [];
+
+            // Extract items from all bags
+            bags.forEach((bag, bagIndex) => {
+                if (bag && bag.inventory) {
+                    bag.inventory.forEach((slot, slotIndex) => {
+                        if (slot && slot.id) {
+                            allItems.push({
+                                id: slot.id,
+                                count: slot.count || 1,
+                                location: characterName + ' - Bag ' + (bagIndex + 1)
+                            });
+                        }
+                    });
+                }
+            });
+
+            if (allItems.length > 0) {
+                await displayInventoryItems(allItems, characterName + ' Inventory');
+            } else {
+                displayDiv.innerHTML = '<p>No items found in ' + characterName + '\'s inventory.</p>';
+            }
+        } else {
+            displayDiv.innerHTML = '<p>Error: ' + (data.message || 'Failed to load character data') + '</p>';
+        }
+    } catch (error) {
+        console.error('Error loading character inventory:', error);
+        displayDiv.innerHTML = '<p>Error loading inventory: ' + error.message + '</p>';
+    }
+}
+
+async function loadBankInventory() {
+    const displayDiv = document.getElementById('inventory-display');
+    displayDiv.innerHTML = '<p>Loading bank...</p>';
+
+    try {
+        const response = await fetch('/api/bank');
+        const data = await response.json();
+
+        if (data.status === 'success' && data.bank) {
+            const allItems = [];
+
+            data.bank.forEach((slot, slotIndex) => {
+                if (slot && slot.id) {
+                    allItems.push({
+                        id: slot.id,
+                        count: slot.count || 1,
+                        location: 'Bank - Slot ' + (slotIndex + 1)
+                    });
+                }
+            });
+
+            if (allItems.length > 0) {
+                await displayInventoryItems(allItems, 'Account Bank');
+            } else {
+                displayDiv.innerHTML = '<p>No items found in bank.</p>';
+            }
+        } else {
+            displayDiv.innerHTML = '<p>Error: ' + (data.message || 'Failed to load bank data') + '</p>';
+        }
+    } catch (error) {
+        console.error('Error loading bank:', error);
+        displayDiv.innerHTML = '<p>Error loading bank: ' + error.message + '</p>';
+    }
+}
+
+async function displayInventoryItems(items, title) {
+    const displayDiv = document.getElementById('inventory-display');
+
+    // Group items by ID and sum counts
+    const itemMap = new Map();
+    items.forEach(item => {
+        if (itemMap.has(item.id)) {
+            const existing = itemMap.get(item.id);
+            existing.count += item.count;
+            existing.locations.push(item.location);
+        } else {
+            itemMap.set(item.id, {
+                id: item.id,
+                count: item.count,
+                locations: [item.location]
+            });
+        }
+    });
+
+    // Get item IDs for batch lookup
+    const itemIds = Array.from(itemMap.keys()).join(',');
+
+    try {
+        // Fetch item details and prices
+        const itemsResponse = await fetch('/api/items?ids=' + itemIds);
+        const itemsData = await itemsResponse.json();
+
+        const pricesResponse = await fetch('/api/tp/prices?ids=' + itemIds);
+        const pricesData = await pricesResponse.json();
+
+        if (itemsData.status !== 'success' || pricesData.status !== 'success') {
+            displayDiv.innerHTML = '<p>Error loading item data</p>';
+            return;
+        }
+
+        // Build display
+        let html = '<div class="query-results">';
+        html += '<h3>' + title + '</h3>';
+        html += '<div style="margin-bottom: 10px;"><strong>Total Items:</strong> ' + itemMap.size + ' types, ' + items.reduce((sum, i) => sum + i.count, 0) + ' total</div>';
+
+        // Create item list
+        itemMap.forEach((itemData, itemId) => {
+            const itemInfo = itemsData.items.find(i => i.id === itemId);
+            const priceInfo = pricesData.prices.find(p => p.id === itemId);
+
+            if (!itemInfo) return;
+
+            const itemName = itemInfo.name || 'Unknown Item';
+            const rarity = itemInfo.rarity || 'Common';
+            const sellPrice = priceInfo && priceInfo.sells ? priceInfo.sells.unit_price : 0;
+            const buyPrice = priceInfo && priceInfo.buys ? priceInfo.buys.unit_price : 0;
+
+            const totalSellValue = sellPrice * itemData.count;
+            const recommendation = calculateRecommendation(sellPrice, buyPrice, priceInfo);
+
+            // Format prices
+            const formatGold = (copper) => {
+                if (!copper) return '—';
+                const gold = Math.floor(copper / 10000);
+                const silver = Math.floor((copper % 10000) / 100);
+                const copperRem = copper % 100;
+                return gold + 'g ' + silver + 's ' + copperRem + 'c';
+            };
+
+            html += '<div class="inventory-item" data-item-id="' + itemId + '" ';
+            html += 'onmouseenter="showInventoryTooltip(event, ' + itemId + ')" ';
+            html += 'onmouseleave="hideInventoryTooltip()">';
+
+            // Item name and rarity
+            html += '<div style="font-weight: bold; color: ' + getRarityColor(rarity) + '">';
+            html += itemName;
+            html += '</div>';
+
+            // Quantity and locations
+            html += '<div>';
+            html += '<div><strong>×' + itemData.count + '</strong></div>';
+            html += '<div style="font-size: 0.85em; opacity: 0.7;">' + itemData.locations.join(', ') + '</div>';
+            html += '</div>';
+
+            // Sell price
+            html += '<div>';
+            html += '<div style="font-size: 0.9em;">Sell: ' + formatGold(sellPrice) + '</div>';
+            html += '<div style="font-size: 0.85em; opacity: 0.7;">Total: ' + formatGold(totalSellValue) + '</div>';
+            html += '</div>';
+
+            // Buy price
+            html += '<div style="font-size: 0.9em;">';
+            html += 'Buy: ' + formatGold(buyPrice);
+            html += '</div>';
+
+            // Recommendation
+            html += '<div>';
+            html += '<span class="recommendation-badge recommendation-' + recommendation.type + '">';
+            html += recommendation.text;
+            html += '</span>';
+            html += '</div>';
+
+            html += '</div>';
+        });
+
+        html += '</div>';
+        displayDiv.innerHTML = html;
+
+    } catch (error) {
+        console.error('Error displaying inventory items:', error);
+        displayDiv.innerHTML = '<p>Error displaying items: ' + error.message + '</p>';
+    }
+}
+
+function calculateRecommendation(sellPrice, buyPrice, priceInfo) {
+    if (!sellPrice || !buyPrice) {
+        return { type: 'hold', text: '⏸️ No Market Data' };
+    }
+
+    const spread = sellPrice - buyPrice;
+    const spreadPercent = (spread / buyPrice) * 100;
+
+    // Calculate velocity (if available)
+    const sellVelocity = priceInfo && priceInfo.sells ? priceInfo.sells.quantity : 0;
+    const buyVelocity = priceInfo && priceInfo.buys ? priceInfo.buys.quantity : 0;
+
+    // High spread and high sell orders = good time to sell
+    if (spreadPercent > 15 && sellVelocity > buyVelocity) {
+        return { type: 'sell', text: '💰 Sell Now (High Demand)' };
+    }
+
+    // Low spread = list for sale at sell price
+    if (spreadPercent < 5) {
+        return { type: 'sell', text: '📤 List for Sale' };
+    }
+
+    // High buy orders = might be worth waiting
+    if (buyVelocity > sellVelocity * 1.5) {
+        return { type: 'hold', text: '⏳ Hold (Rising Demand)' };
+    }
+
+    // Moderate spread = sell when convenient
+    if (spreadPercent > 5 && spreadPercent <= 15) {
+        return { type: 'sell', text: '💵 Sell Soon' };
+    }
+
+    return { type: 'hold', text: '⏸️ Hold' };
+}
+
+function getRarityColor(rarity) {
+    const colors = {
+        'Junk': '#aaa',
+        'Common': '#fff',
+        'Fine': '#62a4da',
+        'Masterwork': '#1a9306',
+        'Rare': '#fcd00b',
+        'Exotic': '#ffa405',
+        'Ascended': '#fb3e8d',
+        'Legendary': '#4c139d'
+    };
+    return colors[rarity] || '#fff';
+}
+
+async function showInventoryTooltip(event, itemId) {
+    const tooltip = document.getElementById('inventory-item-tooltip');
+    if (!tooltip) return;
+
+    try {
+        // Fetch price history (for now just show current prices)
+        const response = await fetch('/api/tp/prices?ids=' + itemId);
+        const data = await response.json();
+
+        if (data.status === 'success' && data.prices && data.prices.length > 0) {
+            const priceInfo = data.prices[0];
+
+            let html = '<div>';
+            html += '<div style="font-weight: bold; margin-bottom: 10px;">Market Data</div>';
+
+            if (priceInfo.buys) {
+                html += '<div style="margin-bottom: 5px;">';
+                html += '<strong>Buy Orders:</strong> ' + priceInfo.buys.quantity + ' @ ';
+                html += formatCopper(priceInfo.buys.unit_price);
+                html += '</div>';
+            }
+
+            if (priceInfo.sells) {
+                html += '<div style="margin-bottom: 5px;">';
+                html += '<strong>Sell Listings:</strong> ' + priceInfo.sells.quantity + ' @ ';
+                html += formatCopper(priceInfo.sells.unit_price);
+                html += '</div>';
+            }
+
+            html += '<div style="margin-top: 10px; font-size: 0.85em; opacity: 0.7;">';
+            html += 'Hover for market trends';
+            html += '</div>';
+            html += '</div>';
+
+            tooltip.innerHTML = html;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (event.pageX + 15) + 'px';
+            tooltip.style.top = (event.pageY + 15) + 'px';
+        }
+    } catch (error) {
+        console.error('Error showing tooltip:', error);
+    }
+}
+
+function hideInventoryTooltip() {
+    const tooltip = document.getElementById('inventory-item-tooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
+}
+
+async function searchAllInventories() {
+    const searchInput = document.getElementById('inventory-search');
+    const query = searchInput.value.trim().toLowerCase();
+
+    if (!query) {
+        alert('Please enter a search term');
+        return;
+    }
+
+    const displayDiv = document.getElementById('inventory-display');
+    displayDiv.innerHTML = '<p>Searching all inventories for "' + query + '"...</p>';
+
+    try {
+        // Get all characters
+        const charsResponse = await fetch('/api/characters');
+        const charsData = await charsResponse.json();
+
+        if (charsData.status !== 'success') {
+            displayDiv.innerHTML = '<p>Error loading characters</p>';
+            return;
+        }
+
+        // Collect all items from all characters
+        const allItems = [];
+
+        for (const charName of charsData.characters) {
+            const encodedName = encodeURIComponent(charName);
+            const charResponse = await fetch('/api/character/' + encodedName);
+            const charData = await charResponse.json();
+
+            if (charData.status === 'success' && charData.character && charData.character.bags) {
+                charData.character.bags.forEach((bag, bagIndex) => {
+                    if (bag && bag.inventory) {
+                        bag.inventory.forEach((slot, slotIndex) => {
+                            if (slot && slot.id) {
+                                allItems.push({
+                                    id: slot.id,
+                                    count: slot.count || 1,
+                                    location: charName + ' - Bag ' + (bagIndex + 1)
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        }
+
+        // Get bank items
+        const bankResponse = await fetch('/api/bank');
+        const bankData = await bankResponse.json();
+
+        if (bankData.status === 'success' && bankData.bank) {
+            bankData.bank.forEach((slot, slotIndex) => {
+                if (slot && slot.id) {
+                    allItems.push({
+                        id: slot.id,
+                        count: slot.count || 1,
+                        location: 'Bank - Slot ' + (slotIndex + 1)
+                    });
+                }
+            });
+        }
+
+        if (allItems.length === 0) {
+            displayDiv.innerHTML = '<p>No items found in any inventory or bank.</p>';
+            return;
+        }
+
+        // Get unique item IDs
+        const uniqueIds = [...new Set(allItems.map(i => i.id))];
+        const itemIds = uniqueIds.join(',');
+
+        // Fetch item details
+        const itemsResponse = await fetch('/api/items?ids=' + itemIds);
+        const itemsData = await itemsResponse.json();
+
+        if (itemsData.status !== 'success') {
+            displayDiv.innerHTML = '<p>Error loading item data</p>';
+            return;
+        }
+
+        // Filter items by search query
+        const matchingItems = allItems.filter(item => {
+            const itemInfo = itemsData.items.find(i => i.id === item.id);
+            if (!itemInfo) return false;
+            return itemInfo.name.toLowerCase().includes(query);
+        });
+
+        if (matchingItems.length === 0) {
+            displayDiv.innerHTML = '<p>No items found matching "' + query + '"</p>';
+            return;
+        }
+
+        // Display matching items
+        await displayInventoryItems(matchingItems, 'Search Results for "' + query + '"');
+
+    } catch (error) {
+        console.error('Error searching inventories:', error);
+        displayDiv.innerHTML = '<p>Error searching: ' + error.message + '</p>';
+    }
 }
 
 // ============================================================================
