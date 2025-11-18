@@ -3249,21 +3249,31 @@ function showTeamGuilds(team, event) {
 
 async function loadInventoryCharacters() {
     const selectElement = document.getElementById('inventory-character-select');
-    if (!selectElement) return;
+    if (!selectElement) {
+        console.error('inventory-character-select element not found');
+        return;
+    }
+
+    console.log('Loading inventory characters...');
+    selectElement.innerHTML = '<option value="">Loading...</option>';
 
     try {
         const response = await fetch('/api/characters');
+        console.log('Characters API response status:', response.status);
         const data = await response.json();
+        console.log('Characters API data:', data);
 
-        if (data.status === 'success' && data.characters) {
+        if (data.status === 'success' && data.data) {
+            console.log('Successfully loaded', data.data.length, 'characters');
             selectElement.innerHTML = '<option value="">Select a character...</option>';
-            data.characters.forEach(charName => {
+            data.data.forEach(charName => {
                 const option = document.createElement('option');
                 option.value = charName;
                 option.textContent = charName;
                 selectElement.appendChild(option);
             });
         } else {
+            console.error('API returned non-success status:', data);
             selectElement.innerHTML = '<option value="">Error loading characters</option>';
         }
     } catch (error) {
