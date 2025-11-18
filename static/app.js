@@ -2340,17 +2340,17 @@ async function loadCharacters() {
 async function loadCharacterList() {
     const selectDiv = document.getElementById('character-select');
     const resultDiv = document.getElementById('characters-result');
-    
+
     selectDiv.innerHTML = '<div class="loading"></div> Loading characters...';
     resultDiv.innerHTML = '';
-    
+
     try {
         const response = await fetch('/api/characters');
         const data = await response.json();
-        
+
         if (data.status === 'success') {
             let html = '<h3>Select a Character</h3><div class="character-grid">';
-            
+
             data.data.forEach(name => {
                 html += `
                     <div class="character-card" onclick="loadCharacterDetails('${name}')">
@@ -2359,11 +2359,30 @@ async function loadCharacterList() {
                     </div>
                 `;
             });
-            
+
             html += '</div>';
             selectDiv.innerHTML = html;
         } else {
-            selectDiv.innerHTML = `<div class="status-message status-error">Error: ${data.message}</div>`;
+            // Check if it's a 403 error (no API key)
+            if (data.message && data.message.includes('403')) {
+                selectDiv.innerHTML = `
+                    <div class="status-message status-error">
+                        <h3>🔑 API Key Required</h3>
+                        <p>You need to set up your GW2 API key before viewing characters.</p>
+                        <p><strong>To get started:</strong></p>
+                        <ol style="text-align: left; margin: 10px auto; max-width: 500px;">
+                            <li>Go to the <strong>Settings</strong> tab</li>
+                            <li>Enter your GW2 API key</li>
+                            <li>Click "Save API Key"</li>
+                        </ol>
+                        <p style="margin-top: 15px;">
+                            <button onclick="showTab('settings')" class="btn btn-primary">Go to Settings</button>
+                        </p>
+                    </div>
+                `;
+            } else {
+                selectDiv.innerHTML = `<div class="status-message status-error">Error: ${data.message}</div>`;
+            }
         }
     } catch (error) {
         selectDiv.innerHTML = `<div class="status-message status-error">Error: ${error.message}</div>`;
@@ -2435,26 +2454,45 @@ async function loadMaterials() {
 async function loadBank() {
     const resultDiv = document.getElementById('dashboard-result');
     resultDiv.innerHTML = '<div class="loading"></div> Loading bank...';
-    
+
     try {
         const response = await fetch('/api/bank');
         const data = await response.json();
-        
+
         if (data.status === 'success') {
             let html = `<h3>Bank (${data.filled_slots} / ${data.total_slots} slots)</h3>`;
             html += '<table class="data-table"><thead><tr><th>Item ID</th><th>Count</th><th>Binding</th></tr></thead><tbody>';
-            
+
             data.data.slice(0, 50).forEach(item => {
                 html += `<tr><td>${item.id}</td><td>${item.count}</td><td>${item.binding || 'None'}</td></tr>`;
             });
-            
+
             html += '</tbody></table>';
             if (data.data.length > 50) {
                 html += `<p style="margin-top: 10px; color: #a0a0a0;">Showing first 50 items</p>`;
             }
             resultDiv.innerHTML = html;
         } else {
-            resultDiv.innerHTML = `<div class="status-message status-error">Error: ${data.message}</div>`;
+            // Check if it's a 403 error (no API key)
+            if (data.message && data.message.includes('403')) {
+                resultDiv.innerHTML = `
+                    <div class="status-message status-error">
+                        <h3>🔑 API Key Required</h3>
+                        <p>You need to set up your GW2 API key before viewing your bank.</p>
+                        <p><strong>To get started:</strong></p>
+                        <ol style="text-align: left; margin: 10px auto; max-width: 500px;">
+                            <li>Go to the <strong>Settings</strong> tab</li>
+                            <li>Enter your GW2 API key</li>
+                            <li>Click "Save API Key"</li>
+                        </ol>
+                        <p style="margin-top: 15px;">
+                            <button onclick="showTab('settings')" class="btn btn-primary">Go to Settings</button>
+                        </p>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `<div class="status-message status-error">Error: ${data.message}</div>`;
+            }
         }
     } catch (error) {
         resultDiv.innerHTML = `<div class="status-message status-error">Error: ${error.message}</div>`;
@@ -3277,7 +3315,20 @@ async function loadCharacterInventory() {
                 displayDiv.innerHTML = '<p>No items found in ' + characterName + '\'s inventory.</p>';
             }
         } else {
-            displayDiv.innerHTML = '<p>Error: ' + (data.message || 'Failed to load character data') + '</p>';
+            // Check if it's a 403 error (no API key)
+            if (data.message && data.message.includes('403')) {
+                displayDiv.innerHTML = `
+                    <div class="status-message status-error">
+                        <h3>🔑 API Key Required</h3>
+                        <p>You need to set up your GW2 API key before viewing character inventory.</p>
+                        <p style="margin-top: 15px;">
+                            <button onclick="showTab('settings')" class="btn btn-primary">Go to Settings</button>
+                        </p>
+                    </div>
+                `;
+            } else {
+                displayDiv.innerHTML = '<p>Error: ' + (data.message || 'Failed to load character data') + '</p>';
+            }
         }
     } catch (error) {
         console.error('Error loading character inventory:', error);
@@ -3312,7 +3363,20 @@ async function loadBankInventory() {
                 displayDiv.innerHTML = '<p>No items found in bank.</p>';
             }
         } else {
-            displayDiv.innerHTML = '<p>Error: ' + (data.message || 'Failed to load bank data') + '</p>';
+            // Check if it's a 403 error (no API key)
+            if (data.message && data.message.includes('403')) {
+                displayDiv.innerHTML = `
+                    <div class="status-message status-error">
+                        <h3>🔑 API Key Required</h3>
+                        <p>You need to set up your GW2 API key before viewing your bank.</p>
+                        <p style="margin-top: 15px;">
+                            <button onclick="showTab('settings')" class="btn btn-primary">Go to Settings</button>
+                        </p>
+                    </div>
+                `;
+            } else {
+                displayDiv.innerHTML = '<p>Error: ' + (data.message || 'Failed to load bank data') + '</p>';
+            }
         }
     } catch (error) {
         console.error('Error loading bank:', error);
