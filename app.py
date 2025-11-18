@@ -943,7 +943,17 @@ def get_tp_prices():
         ids = [int(x.strip()) for x in item_ids.split(',')]
         client = GW2API()
 
-        prices = client.get_tp_prices(ids)
+        # Try to get prices, but handle items that don't have TP listings
+        try:
+            prices = client.get_tp_prices(ids)
+        except Exception as price_error:
+            # If price lookup fails (e.g., account-bound items), return empty result
+            logger.warning(f"Price lookup failed for items {ids}: {price_error}")
+            return jsonify({
+                'status': 'success',
+                'data': []
+            })
+
         items = client.get_items(ids)
 
         # Create item name map

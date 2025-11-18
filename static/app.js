@@ -3551,8 +3551,8 @@ async function showInventoryTooltip(event, itemId) {
         const response = await fetch('/api/tp/prices?ids=' + itemId);
         const data = await response.json();
 
-        if (data.status === 'success' && data.prices && data.prices.length > 0) {
-            const priceInfo = data.prices[0];
+        if (data.status === 'success' && data.data && data.data.length > 0) {
+            const priceInfo = data.data[0];
 
             let html = '<div>';
             html += '<div style="font-weight: bold; margin-bottom: 10px;">Market Data</div>';
@@ -3676,7 +3676,7 @@ async function searchAllInventories() {
 
         // Filter items by search query
         const matchingItems = allItems.filter(item => {
-            const itemInfo = itemsData.items.find(i => i.id === item.id);
+            const itemInfo = itemsData.data.find(i => i.id === item.id);
             if (!itemInfo) return false;
             return itemInfo.name.toLowerCase().includes(query);
         });
