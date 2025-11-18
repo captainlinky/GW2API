@@ -3532,14 +3532,31 @@ async function renderWarRoomMap(mapType) {
             x = normalizedX * config.width;
             y = normalizedY * config.height;
 
+            // Apply calibration offsets (calculated from manual adjustments in debug mode)
+            // These correct for slight misalignment between wiki images and API coordinate system
+            const calibrationOffsets = {
+                'Center': { x: 0, y: 0 },           // EB - well aligned
+                'RedHome': { x: 32, y: 43 },        // Desert BL - based on 1 sample
+                'GreenHome': { x: 34, y: -52 },     // Alpine BL - based on 5 samples
+                'BlueHome': { x: 19, y: -57 }       // Alpine BL - based on 9 samples
+            };
+
+            if (calibrationOffsets[mapType]) {
+                x += calibrationOffsets[mapType].x;
+                y += calibrationOffsets[mapType].y;
+            }
+
             // Log first objective transformation for debugging
             if (!firstObjectiveLogged) {
+                const offset = calibrationOffsets[mapType] || { x: 0, y: 0 };
                 console.log(`War Room: Sample transformation for ${objMeta.name}:`);
                 console.log(`  Continent coord: [${objMeta.coord[0]}, ${objMeta.coord[1]}]`);
                 console.log(`  Map coord: [${mapX.toFixed(1)}, ${mapY.toFixed(1)}]`);
                 console.log(`  Map bounds: [${mapMinX}, ${mapMinY}] to [${mapMaxX}, ${mapMaxY}]`);
                 console.log(`  Normalized: [${normalizedX.toFixed(3)}, ${normalizedY.toFixed(3)}]`);
-                console.log(`  Canvas coord: [${x.toFixed(1)}, ${y.toFixed(1)}] (size: ${config.width}x${config.height})`);
+                console.log(`  Canvas coord (before calibration): [${(x - offset.x).toFixed(1)}, ${(y - offset.y).toFixed(1)}]`);
+                console.log(`  Calibration offset: [${offset.x}, ${offset.y}]`);
+                console.log(`  Final coord: [${x.toFixed(1)}, ${y.toFixed(1)}] (size: ${config.width}x${config.height})`);
                 firstObjectiveLogged = true;
             }
         } else {
