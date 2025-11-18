@@ -3290,8 +3290,8 @@ async function loadCharacterInventory() {
         const response = await fetch('/api/character/' + encodedName);
         const data = await response.json();
 
-        if (data.status === 'success' && data.character) {
-            const bags = data.character.bags || [];
+        if (data.status === 'success' && data.data) {
+            const bags = data.data.bags || [];
             const allItems = [];
 
             // Extract items from all bags
@@ -3344,10 +3344,10 @@ async function loadBankInventory() {
         const response = await fetch('/api/bank');
         const data = await response.json();
 
-        if (data.status === 'success' && data.bank) {
+        if (data.status === 'success' && data.data) {
             const allItems = [];
 
-            data.bank.forEach((slot, slotIndex) => {
+            data.data.forEach((slot, slotIndex) => {
                 if (slot && slot.id) {
                     allItems.push({
                         id: slot.id,
