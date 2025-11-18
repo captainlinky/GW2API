@@ -452,6 +452,7 @@
                 <!-- Transaction Tabs -->
                 <div class="tp-tabs" style="margin-bottom: 20px;">
                     <button class="tp-tab active" onclick="switchTPView('prices')">🔍 Price Lookup</button>
+                    <button class="tp-tab" onclick="switchTPView('inventory')">🎒 Inventory & Bank</button>
                     <button class="tp-tab" onclick="switchTPView('selling')">📤 Selling</button>
                     <button class="tp-tab" onclick="switchTPView('sold')">✅ Sold</button>
                     <button class="tp-tab" onclick="switchTPView('buying')">📥 Buying</button>
@@ -480,6 +481,46 @@
                             <button onclick="setItemIds('19721,24277,19976')" class="btn btn-small">All Three</button>
                         </div>
                     </div>
+                </div>
+
+                <!-- Inventory & Bank View -->
+                <div id="tp-view-inventory" class="tp-view">
+                    <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                        <!-- Character Inventory Section -->
+                        <div style="flex: 1; min-width: 300px;">
+                            <h3>🎒 Character Inventory</h3>
+                            <div class="input-group" style="margin-bottom: 10px;">
+                                <select id="inventory-character-select" class="input-text" style="flex: 1;">
+                                    <option value="">Select a character...</option>
+                                </select>
+                                <button onclick="loadCharacterInventory()" class="btn btn-primary">Load Inventory</button>
+                            </div>
+                        </div>
+
+                        <!-- Bank Section -->
+                        <div style="flex: 1; min-width: 300px;">
+                            <h3>🏦 Account Bank</h3>
+                            <button onclick="loadBankInventory()" class="btn btn-primary" style="width: 100%;">Load Bank</button>
+                        </div>
+                    </div>
+
+                    <!-- Search Section -->
+                    <div class="query-form" style="margin-bottom: 20px;">
+                        <h3>🔍 Search All Inventories</h3>
+                        <div class="input-group">
+                            <input type="text" id="inventory-search" placeholder="Search for item (e.g., 'Glob of Ectoplasm', 'mystic coin')" class="input-text">
+                            <button onclick="searchAllInventories()" class="btn btn-primary">Search All</button>
+                        </div>
+                        <p style="font-size: 0.9em; opacity: 0.7; margin-top: 5px;">
+                            Searches across all character inventories, bank, and material storage
+                        </p>
+                    </div>
+
+                    <!-- Inventory Display -->
+                    <div id="inventory-display" class="result-container"></div>
+
+                    <!-- Hover Tooltip for Market Trends -->
+                    <div id="inventory-item-tooltip" class="inventory-tooltip" style="display: none;"></div>
                 </div>
 
                 <!-- Selling View -->

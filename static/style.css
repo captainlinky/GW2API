@@ -1887,3 +1887,118 @@ body {
     max-width: 100%;
     display: block;
 }
+
+/* Inventory & Bank Styles */
+.inventory-tooltip {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    padding: 15px;
+    color: #fff;
+    font-size: 0.9em;
+    max-width: 400px;
+    z-index: 10000;
+    pointer-events: none;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.inventory-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto auto;
+    gap: 15px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.inventory-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateX(4px);
+}
+
+.inventory-item-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 4px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.inventory-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.inventory-item-name {
+    font-weight: bold;
+    font-size: 1.05em;
+}
+
+.inventory-item-quantity {
+    opacity: 0.7;
+    font-size: 0.9em;
+}
+
+.inventory-item-prices {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.9em;
+}
+
+.inventory-item-recommendation {
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.85em;
+    white-space: nowrap;
+}
+
+.recommendation-sell {
+    background: rgba(46, 204, 113, 0.2);
+    border: 1px solid #2ecc71;
+    color: #2ecc71;
+}
+
+.recommendation-buy {
+    background: rgba(52, 152, 219, 0.2);
+    border: 1px solid #3498db;
+    color: #3498db;
+}
+
+.recommendation-hold {
+    background: rgba(241, 196, 15, 0.2);
+    border: 1px solid #f1c40f;
+    color: #f1c40f;
+}
+
+.inventory-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 20px 0 10px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.inventory-section-title {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.inventory-total-value {
+    font-size: 1.1em;
+    color: #f1c40f;
+}
+
+.trend-chart-mini {
+    width: 100%;
+    height: 60px;
+    margin-top: 10px;
+}
