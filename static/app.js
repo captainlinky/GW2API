@@ -3431,22 +3431,23 @@ async function renderWarRoomMap(mapType) {
         } catch (e) { return false; }
     })();
 
+    // Use GW2 Wiki images (full coverage) instead of local cropped images
     const bgUrls = {
         'Center': {
-            low: SUPPORTS_WEBP ? '/static/maps/eb_512.webp' : '/static/maps/eb_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/eb_2048.webp' : '/static/maps/eb_2048.jpg'
+            low: 'https://wiki.guildwars2.com/images/c/c4/Eternal_Battlegrounds_map.jpg',
+            high: 'https://wiki.guildwars2.com/images/c/c4/Eternal_Battlegrounds_map.jpg'
         },
         'RedHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/red_bl_512.webp' : '/static/maps/red_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/red_bl_2048.webp' : '/static/maps/red_bl_2048.jpg'
+            low: 'https://wiki.guildwars2.com/images/8/88/Red_Desert_Borderlands_map.jpg',
+            high: 'https://wiki.guildwars2.com/images/8/88/Red_Desert_Borderlands_map.jpg'
         },
         'BlueHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/blue_bl_512.webp' : '/static/maps/blue_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/blue_bl_2048.webp' : '/static/maps/blue_bl_2048.jpg'
+            low: 'https://wiki.guildwars2.com/images/f/f7/Blue_Alpine_Borderlands_map.jpg',
+            high: 'https://wiki.guildwars2.com/images/f/f7/Blue_Alpine_Borderlands_map.jpg'
         },
         'GreenHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/green_bl_512.webp' : '/static/maps/green_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/green_bl_2048.webp' : '/static/maps/green_bl_2048.jpg'
+            low: 'https://wiki.guildwars2.com/images/4/4c/Green_Alpine_Borderlands_map.jpg',
+            high: 'https://wiki.guildwars2.com/images/4/4c/Green_Alpine_Borderlands_map.jpg'
         }
     };
 
@@ -3623,19 +3624,7 @@ async function renderWarRoomMap(mapType) {
                 }
             };
             img.onerror = () => {
-                console.warn(`War Room: High-res failed for ${mapType}, trying fallback`);
-                // Remote wiki fallback if local high-res missing
-                const fallback = {
-                    'Center': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Eternal_Battlegrounds_map.jpg?width=2048',
-                    'RedHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Red_Desert_Borderlands_map.jpg?width=2048',
-                    'BlueHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Blue_Alpine_Borderlands_map.jpg?width=2048',
-                    'GreenHome': 'https://wiki.guildwars2.com/wiki/Special:FilePath/Green_Alpine_Borderlands_map.jpg?width=2048'
-                };
-                const bg = container.querySelector('#warroom-map-bg');
-                if (bg && fallback[mapType]) {
-                    bg.setAttribute('href', fallback[mapType]);
-                    console.log(`War Room: Using wiki fallback for ${mapType}`);
-                }
+                console.error(`War Room: Failed to load background for ${mapType} from wiki`);
             };
             console.log(`War Room: Loading high-res background: ${bgUrls[mapType].high}`);
             img.src = bgUrls[mapType].high;
