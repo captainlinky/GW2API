@@ -3431,24 +3431,23 @@ async function renderWarRoomMap(mapType) {
         } catch (e) { return false; }
     })();
 
-    // Local background images (cropped to playable areas)
-    // Note: Images show playable areas only; gray areas represent out-of-bounds map_rect space
+    // Complete wiki background images (full map coverage)
     const bgUrls = {
         'Center': {
-            low: SUPPORTS_WEBP ? '/static/maps/eb_512.webp' : '/static/maps/eb_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/eb_2048.webp' : '/static/maps/eb_2048.jpg'
+            low: '/static/maps/1024px-Eternal_Battlegrounds_map.jpg',
+            high: '/static/maps/1024px-Eternal_Battlegrounds_map.jpg'
         },
         'RedHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/red_bl_512.webp' : '/static/maps/red_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/red_bl_2048.webp' : '/static/maps/red_bl_2048.jpg'
+            low: '/static/maps/1024px-Red_Desert_Borderlands_map.jpg',
+            high: '/static/maps/1024px-Red_Desert_Borderlands_map.jpg'
         },
         'BlueHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/blue_bl_512.webp' : '/static/maps/blue_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/blue_bl_2048.webp' : '/static/maps/blue_bl_2048.jpg'
+            low: '/static/maps/800px-Blue_Alpine_Borderlands_map.jpg',
+            high: '/static/maps/800px-Blue_Alpine_Borderlands_map.jpg'
         },
         'GreenHome': {
-            low: SUPPORTS_WEBP ? '/static/maps/green_bl_512.webp' : '/static/maps/green_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/static/maps/green_bl_2048.webp' : '/static/maps/green_bl_2048.jpg'
+            low: '/static/maps/800px-Green_Alpine_Borderlands_map.jpg',
+            high: '/static/maps/800px-Green_Alpine_Borderlands_map.jpg'
         }
     };
 
