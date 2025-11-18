@@ -2348,8 +2348,6 @@ async function loadCharacterList() {
         const response = await fetch('/api/characters');
         const data = await response.json();
 
-        console.log('Characters API response:', data);
-
         if (data.status === 'success') {
             let html = '<h3>Select a Character</h3><div class="character-grid">';
 
