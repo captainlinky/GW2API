@@ -3450,21 +3450,27 @@ async function renderWarRoomMap(mapType) {
         }
     };
 
-    // Size canvas based on map_rect coordinate space for accurate objective positioning
-    if (useProperTransform && mapMeta && mapMeta.map_rect) {
-        const mapRect = mapMeta.map_rect;
-        const mapWidth = mapRect[1][0] - mapRect[0][0];
-        const mapHeight = mapRect[1][1] - mapRect[0][1];
-        const aspectRatio = mapHeight / mapWidth;
+    // Background image actual dimensions (these images are cropped to playable areas)
+    const bgImageDimensions = {
+        'Center': { width: 3850, height: 3833 },        // EB nearly square
+        'RedHome': { width: 3228, height: 3245 },       // Desert BL nearly square
+        'BlueHome': { width: 2662, height: 3625 },      // Alpine BL tall
+        'GreenHome': { width: 2692, height: 3637 }      // Alpine BL tall
+    };
+
+    // Size canvas to match background image aspect ratio (not map_rect)
+    if (bgImageDimensions[mapType]) {
+        const imgDims = bgImageDimensions[mapType];
+        const imgAspect = imgDims.height / imgDims.width;
 
         const targetWidth = 2048;
         config = {
             ...config,
             width: targetWidth,
-            height: Math.round(targetWidth * aspectRatio)
+            height: Math.round(targetWidth * imgAspect)
         };
 
-        console.log(`War Room: Canvas sized from map_rect for ${mapType}: ${config.width}x${config.height} (map_rect aspect: ${aspectRatio.toFixed(3)}:1)`);
+        console.log(`War Room: Canvas sized to match background image for ${mapType}: ${config.width}x${config.height} (image: ${imgDims.width}x${imgDims.height}, aspect: ${imgAspect.toFixed(3)}:1)`);
     }
 
     // Create SVG map
