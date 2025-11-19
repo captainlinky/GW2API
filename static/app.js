@@ -2316,11 +2316,12 @@ async function loadWallet() {
         
         if (data.status === 'success') {
             let html = '<h3>Wallet</h3><table class="data-table"><thead><tr><th>Currency</th><th>Amount</th></tr></thead><tbody>';
-            
+
             data.data.forEach(item => {
-                html += `<tr><td>${item.name}</td><td>${item.formatted}</td></tr>`;
+                const iconHtml = item.icon ? `<img src="${item.icon}" alt="${item.name}" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">` : '';
+                html += `<tr><td>${iconHtml}${item.name}</td><td>${item.formatted}</td></tr>`;
             });
-            
+
             html += '</tbody></table>';
             resultDiv.innerHTML = html;
         } else {
@@ -2673,18 +2674,77 @@ async function searchItems(query) {
                 resultsDiv.innerHTML = '<div style="padding: 15px;">Loading item database...</div>';
                 resultsDiv.classList.add('active');
 
-                // Fetch commonly traded items (this list can be expanded)
+                // Fetch commonly traded items (expanded list)
                 const commonItems = [
-                    19721, 24277, 19976, 24295, 24358, 24289, 24300, 24277,
-                    19684, 19685, 19686, 19687, 19688, 19689, 19690, 19691, // T6 materials
-                    24341, 24342, 24343, 24344, 24345, 24346, // Charged items
-                    46731, 46732, 46733, 46734, 46735, 46736, // Obsidian Shards, etc
-                    19721, 19724, 19725, 19726, 19727, 19728, // Essences
-                    12138, 12141, 12142, 12143, 12144, 12145, 12146, 12147, // Cores
-                    24357, 24351, 24350, 24356, 24289, 24300, // Lodestones
-                    19685, 19684, 19686, 19687, // More T6
-                    19976, 19977, 24277, 24295, // Mystic materials
-                    68063, 77482, 76491, 75762 // Legendary materials
+                    // Mystic Forge materials
+                    19721, 24277, 24295, 19976, 46742, 19675,
+
+                    // T6 Fine Materials
+                    24277, 24276, 24358, 24351, 24357, 24289, 24300, 24341, 24342, 24343, 24344, 24345, 24346,
+                    19684, 19685, 19686, 19687, 19688, 19689, 19690, 19691, 19721, 19722, 19723, 19724, 19725, 19726, 19727, 19728,
+                    24277, 24294, 24295, 24341, 24342, 24343, 24344, 24345, 24346,
+
+                    // T5 Fine Materials
+                    24273, 24274, 24275, 24283, 24284, 24285, 24286, 24287, 24288,
+                    19741, 19743, 19748, 19745, 19746, 19747, 19744, 19750,
+
+                    // Cores and Lodestones
+                    24315, 24316, 24317, 24318, 24319, 24320, // Cores
+                    24330, 24329, 24323, 24325, 24327, 24310, // Lodestones
+
+                    // Legendary crafting materials
+                    68063, 77482, 76491, 75762, 79280, 79469, 79557, 79791, 79790, 79817,
+
+                    // Ascended materials
+                    46735, 46736, 46731, 46732, 46733, 46734, 46738, 46739, 46740, 46741,
+
+                    // Obsidian Shards and Spirit Shards
+                    19675, 23203,
+
+                    // Amalgamated Gemstones
+                    24295,
+
+                    // Charged materials
+                    24341, 24342, 24343, 24344, 24345, 24346,
+
+                    // Essences
+                    24355, 24356, 24357, 24350, 24351, 24352,
+
+                    // Ectos and Dust
+                    19721, 19720, 19719,
+
+                    // Common food
+                    12452, 12451, 12450, 91878, 91805, 91876,
+
+                    // Rare unidentified gear
+                    46731, 46732, 48806,
+
+                    // Black Lion items
+                    49424, 49425, 19670, 19671, 19672,
+
+                    // Runes (Superior)
+                    24836, 24824, 24691, 24716, 24765, 24818, 24800, 24836, 44956,
+
+                    // Sigils (Superior)
+                    24615, 24618, 24554, 24575, 24599, 24624, 24658, 24661,
+
+                    // Gifts
+                    19675, 19677, 19678, 19679, 19680, 19681, 19682, 19683,
+
+                    // Leather
+                    19718, 19728, 19730, 19731, 19732, 19733, 19734, 19735, 19736, 19737, 19738, 19739,
+
+                    // Cloth
+                    19718, 19720, 19741, 19743, 19748, 19745, 19746, 19747,
+
+                    // Metal
+                    19697, 19698, 19699, 19700, 19701, 19702, 19703, 19704, 19705, 19706, 19707,
+
+                    // Wood
+                    19723, 19724, 19722, 19726, 19727, 19728, 19709, 19710, 19711, 19712, 19713, 19714,
+
+                    // Trophy items
+                    24277, 24358, 24289, 24300, 19976, 19721
                 ];
 
                 const response = await fetch(`/api/items?ids=${commonItems.join(',')}`);
@@ -3709,13 +3769,13 @@ async function searchAllInventories() {
         // Collect all items from all characters
         const allItems = [];
 
-        for (const charName of charsData.characters) {
+        for (const charName of charsData.data) {
             const encodedName = encodeURIComponent(charName);
             const charResponse = await fetch('/api/character/' + encodedName);
             const charData = await charResponse.json();
 
-            if (charData.status === 'success' && charData.character && charData.character.bags) {
-                charData.character.bags.forEach((bag, bagIndex) => {
+            if (charData.status === 'success' && charData.data && charData.data.bags) {
+                charData.data.bags.forEach((bag, bagIndex) => {
                     if (bag && bag.inventory) {
                         bag.inventory.forEach((slot, slotIndex) => {
                             if (slot && slot.id) {
@@ -3735,8 +3795,8 @@ async function searchAllInventories() {
         const bankResponse = await fetch('/api/bank');
         const bankData = await bankResponse.json();
 
-        if (bankData.status === 'success' && bankData.bank) {
-            bankData.bank.forEach((slot, slotIndex) => {
+        if (bankData.status === 'success' && bankData.data) {
+            bankData.data.forEach((slot, slotIndex) => {
                 if (slot && slot.id) {
                     allItems.push({
                         id: slot.id,
