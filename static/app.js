@@ -2744,7 +2744,33 @@ async function searchItems(query) {
                     19723, 19724, 19722, 19726, 19727, 19728, 19709, 19710, 19711, 19712, 19713, 19714,
 
                     // Trophy items
-                    24277, 24358, 24289, 24300, 19976, 19721
+                    24277, 24358, 24289, 24300, 19976, 19721,
+
+                    // WvW Reward Track items
+                    70093, // Memory of Battle
+                    45179, // Badge of Honor
+                    19976, // Vial of Powerful Blood (T6)
+                    68063, // Provisioner Token
+                    78978, // Gift of Battle
+                    19675, // Obsidian Shard
+
+                    // Mystic Forge Stones and Upgrades
+                    19675, 19976, 24277, 24295, 77310, 19721,
+
+                    // Gem Store / Black Lion
+                    49424, 49425, 43992, 38506,
+
+                    // Festival items (common tradeable)
+                    36060, 38023, 66917, 68063, 39504, 48807,
+
+                    // Infusions (popular)
+                    49424, 49425, 37123, 37124, 37125, 37126, 37127, 37128, 37129, 37130, 37131,
+
+                    // Ascended food
+                    91878, 91805, 91876, 78978, 70093,
+
+                    // Precursors (some)
+                    29169, 29170, 29171, 29172, 29173, 29174, 29175, 29176, 29177
                 ];
 
                 const response = await fetch(`/api/items?ids=${commonItems.join(',')}`);
@@ -3814,16 +3840,27 @@ async function searchAllInventories() {
 
         // Get unique item IDs
         const uniqueIds = [...new Set(allItems.map(i => i.id))];
-        const itemIds = uniqueIds.join(',');
 
-        // Fetch item details
-        const itemsResponse = await fetch('/api/items?ids=' + itemIds);
-        const itemsData = await itemsResponse.json();
-
-        if (itemsData.status !== 'success') {
-            displayDiv.innerHTML = '<p>Error loading item data</p>';
-            return;
+        // Batch requests to avoid URL length limits (max ~200 IDs per request)
+        const batchSize = 200;
+        const itemBatches = [];
+        for (let i = 0; i < uniqueIds.length; i += batchSize) {
+            itemBatches.push(uniqueIds.slice(i, i + batchSize));
         }
+
+        console.log(`Fetching item data in ${itemBatches.length} batches for search`);
+
+        // Fetch all batches in parallel
+        const itemsPromises = itemBatches.map(batch =>
+            fetch('/api/items?ids=' + batch.join(',')).then(r => r.json())
+        );
+
+        const itemsResults = await Promise.all(itemsPromises);
+
+        // Combine results from all batches
+        const allItemsData = itemsResults.flatMap(result => result.status === 'success' ? result.data : []);
+
+        const itemsData = { status: 'success', data: allItemsData };
 
         // Filter items by search query
         const matchingItems = allItems.filter(item => {
