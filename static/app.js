@@ -2669,140 +2669,32 @@ async function searchItems(query) {
     // Debounce the search
     itemSearchTimeout = setTimeout(async () => {
         try {
-            // Build search cache on first search (common tradeable items)
-            if (!itemSearchCache) {
-                resultsDiv.innerHTML = '<div style="padding: 15px;">Loading item database...</div>';
-                resultsDiv.classList.add('active');
+            resultsDiv.innerHTML = '<div style="padding: 15px;">Searching...</div>';
+            resultsDiv.classList.add('active');
 
-                // Fetch commonly traded items (expanded list)
-                const commonItems = [
-                    // Mystic Forge materials
-                    19721, 24277, 24295, 19976, 46742, 19675,
+            // Call backend search endpoint
+            const response = await fetch(`/api/items/search?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
 
-                    // T6 Fine Materials
-                    24277, 24276, 24358, 24351, 24357, 24289, 24300, 24341, 24342, 24343, 24344, 24345, 24346,
-                    19684, 19685, 19686, 19687, 19688, 19689, 19690, 19691, 19721, 19722, 19723, 19724, 19725, 19726, 19727, 19728,
-                    24277, 24294, 24295, 24341, 24342, 24343, 24344, 24345, 24346,
+            if (data.status === 'success') {
+                const matches = data.data;
 
-                    // T5 Fine Materials
-                    24273, 24274, 24275, 24283, 24284, 24285, 24286, 24287, 24288,
-                    19741, 19743, 19748, 19745, 19746, 19747, 19744, 19750,
-
-                    // Cores and Lodestones
-                    24315, 24316, 24317, 24318, 24319, 24320, // Cores
-                    24330, 24329, 24323, 24325, 24327, 24310, // Lodestones
-
-                    // Legendary crafting materials
-                    68063, 77482, 76491, 75762, 79280, 79469, 79557, 79791, 79790, 79817,
-
-                    // Ascended materials
-                    46735, 46736, 46731, 46732, 46733, 46734, 46738, 46739, 46740, 46741,
-
-                    // Obsidian Shards and Spirit Shards
-                    19675, 23203,
-
-                    // Amalgamated Gemstones
-                    24295,
-
-                    // Charged materials
-                    24341, 24342, 24343, 24344, 24345, 24346,
-
-                    // Essences
-                    24355, 24356, 24357, 24350, 24351, 24352,
-
-                    // Ectos and Dust
-                    19721, 19720, 19719,
-
-                    // Common food
-                    12452, 12451, 12450, 91878, 91805, 91876,
-
-                    // Rare unidentified gear
-                    46731, 46732, 48806,
-
-                    // Black Lion items
-                    49424, 49425, 19670, 19671, 19672,
-
-                    // Runes (Superior)
-                    24836, 24824, 24691, 24716, 24765, 24818, 24800, 24836, 44956,
-
-                    // Sigils (Superior)
-                    24615, 24618, 24554, 24575, 24599, 24624, 24658, 24661,
-
-                    // Gifts
-                    19675, 19677, 19678, 19679, 19680, 19681, 19682, 19683,
-
-                    // Leather
-                    19718, 19728, 19730, 19731, 19732, 19733, 19734, 19735, 19736, 19737, 19738, 19739,
-
-                    // Cloth
-                    19718, 19720, 19741, 19743, 19748, 19745, 19746, 19747,
-
-                    // Metal
-                    19697, 19698, 19699, 19700, 19701, 19702, 19703, 19704, 19705, 19706, 19707,
-
-                    // Wood
-                    19723, 19724, 19722, 19726, 19727, 19728, 19709, 19710, 19711, 19712, 19713, 19714,
-
-                    // Trophy items
-                    24277, 24358, 24289, 24300, 19976, 19721,
-
-                    // WvW Reward Track items
-                    70093, // Memory of Battle
-                    45179, // Badge of Honor
-                    19976, // Vial of Powerful Blood (T6)
-                    68063, // Provisioner Token
-                    78978, // Gift of Battle
-                    19675, // Obsidian Shard
-
-                    // Mystic Forge Stones and Upgrades
-                    19675, 19976, 24277, 24295, 77310, 19721,
-
-                    // Gem Store / Black Lion
-                    49424, 49425, 43992, 38506,
-
-                    // Festival items (common tradeable)
-                    36060, 38023, 66917, 68063, 39504, 48807,
-
-                    // Infusions (popular)
-                    49424, 49425, 37123, 37124, 37125, 37126, 37127, 37128, 37129, 37130, 37131,
-
-                    // Ascended food
-                    91878, 91805, 91876, 78978, 70093,
-
-                    // Precursors (some)
-                    29169, 29170, 29171, 29172, 29173, 29174, 29175, 29176, 29177
-                ];
-
-                const response = await fetch(`/api/items?ids=${commonItems.join(',')}`);
-                const data = await response.json();
-
-                if (data.status === 'success') {
-                    itemSearchCache = data.data;
+                if (matches.length === 0) {
+                    resultsDiv.innerHTML = '<div style="padding: 15px; opacity: 0.6;">No matches found.</div>';
                 } else {
-                    resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;">Error loading items</div>';
-                    return;
+                    let html = '';
+                    matches.forEach(item => {
+                        html += `
+                            <div class="search-result-item" onclick="selectItem(${item.id}, '${item.name.replace(/'/g, "\\'")}')">
+                                ${item.icon ? `<img src="${item.icon}" alt="${item.name}">` : ''}
+                                <div>${item.name}</div>
+                            </div>
+                        `;
+                    });
+                    resultsDiv.innerHTML = html;
                 }
-            }
-
-            // Filter items by query
-            const lowerQuery = query.toLowerCase();
-            const matches = itemSearchCache.filter(item =>
-                item.name.toLowerCase().includes(lowerQuery)
-            ).slice(0, 10); // Limit to 10 results
-
-            if (matches.length === 0) {
-                resultsDiv.innerHTML = '<div style="padding: 15px; opacity: 0.6;">No matches found. Try searching for common items like "ecto" or "mystic".</div>';
             } else {
-                let html = '';
-                matches.forEach(item => {
-                    html += `
-                        <div class="search-result-item" onclick="selectItem(${item.id}, '${item.name.replace(/'/g, "\\'")}')">
-                            ${item.icon ? `<img src="${item.icon}" alt="${item.name}">` : ''}
-                            <div>${item.name}</div>
-                        </div>
-                    `;
-                });
-                resultsDiv.innerHTML = html;
+                resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;">Error: ' + data.message + '</div>';
             }
 
             resultsDiv.classList.add('active');

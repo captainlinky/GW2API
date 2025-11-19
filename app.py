@@ -1264,18 +1264,18 @@ def calculate_tp_recommendation(spread_percent, supply_demand_ratio, velocity, b
 def get_items():
     """Get item information."""
     item_ids = request.args.get('ids', '')
-    
+
     if not item_ids:
         return jsonify({
             'status': 'error',
             'message': 'No item IDs provided'
         }), 400
-    
+
     try:
         ids = [int(x.strip()) for x in item_ids.split(',')]
         client = GW2API()
         items = client.get_items(ids)
-        
+
         return jsonify({
             'status': 'success',
             'data': items
@@ -1285,6 +1285,96 @@ def get_items():
             'status': 'error',
             'message': str(e)
         }), 400
+
+
+# Item search cache (refresh every 6 hours)
+item_search_cache = None
+item_search_cache_time = None
+item_search_lock = threading.Lock()
+
+@app.route('/api/items/search')
+def search_items():
+    """Search for items by name."""
+    global item_search_cache, item_search_cache_time
+
+    query = request.args.get('q', '').strip().lower()
+
+    if not query or len(query) < 2:
+        return jsonify({
+            'status': 'error',
+            'message': 'Query must be at least 2 characters'
+        }), 400
+
+    try:
+        # Check if cache needs refresh (6 hours)
+        cache_age = None
+        if item_search_cache_time:
+            cache_age = (datetime.utcnow() - item_search_cache_time).total_seconds()
+
+        if not item_search_cache or not cache_age or cache_age > 21600:  # 6 hours
+            with item_search_lock:
+                # Double-check after acquiring lock
+                if not item_search_cache or not cache_age or cache_age > 21600:
+                    logger.info("[SEARCH] Refreshing item search cache...")
+                    client = GW2API()
+
+                    # Get all item IDs
+                    all_ids = client.get_items()
+                    logger.info(f"[SEARCH] Found {len(all_ids)} total items")
+
+                    # Fetch items in batches of 200
+                    batch_size = 200
+                    all_items = []
+
+                    for i in range(0, len(all_ids), batch_size):
+                        batch = all_ids[i:i + batch_size]
+                        try:
+                            items = client.get_items(batch)
+                            all_items.extend(items)
+                        except Exception as e:
+                            logger.warning(f"[SEARCH] Failed to fetch batch {i//batch_size + 1}: {e}")
+                            continue
+
+                    # Filter to only tradeable items (have trading post data)
+                    tradeable_items = []
+                    for item in all_items:
+                        # Include if item has flags indicating it's tradeable
+                        flags = item.get('flags', [])
+                        if 'AccountBound' not in flags and 'SoulbindOnAcquire' not in flags:
+                            tradeable_items.append({
+                                'id': item['id'],
+                                'name': item['name'],
+                                'icon': item.get('icon', ''),
+                                'rarity': item.get('rarity', ''),
+                                'level': item.get('level', 0),
+                                'type': item.get('type', '')
+                            })
+
+                    item_search_cache = tradeable_items
+                    item_search_cache_time = datetime.utcnow()
+                    logger.info(f"[SEARCH] Cached {len(tradeable_items)} tradeable items")
+
+        # Search cache
+        matches = [
+            item for item in item_search_cache
+            if query in item['name'].lower()
+        ]
+
+        # Limit to top 20 results
+        matches = matches[:20]
+
+        return jsonify({
+            'status': 'success',
+            'data': matches,
+            'count': len(matches)
+        })
+
+    except Exception as e:
+        logger.error(f"[SEARCH] Error: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 
 @app.route('/api/proxy/maps/<int:map_id>')
