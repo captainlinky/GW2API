@@ -2385,18 +2385,33 @@ async function checkApiStatus() {
         const badge = document.getElementById('account-badge');
         if (data.status === 'success') {
             // API key is valid and working
-            badge.innerHTML = `✓ ${data.account_name}`;
+            badge.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span>✓ ${data.account_name}</span>
+                    <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em;">Logout</button>
+                </div>
+            `;
             badge.style.background = 'rgba(76, 175, 80, 0.2)';
             badge.style.color = '#4caf50';
         } else if (data.has_key) {
             // API key exists but call failed (rate limit, network error, invalid key)
-            badge.innerHTML = '⚠ API Error';
+            badge.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span>⚠ API Error</span>
+                    <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em;">Logout</button>
+                </div>
+            `;
             badge.style.background = 'rgba(244, 67, 54, 0.2)';
             badge.style.color = '#f44336';
             badge.title = data.message || 'API request failed';
         } else {
             // No API key configured
-            badge.innerHTML = '⚠ No API Key';
+            badge.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span>⚠ No API Key</span>
+                    <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em;">Logout</button>
+                </div>
+            `;
             badge.style.background = 'rgba(255, 152, 0, 0.2)';
             badge.style.color = '#ff9800';
         }
@@ -2406,7 +2421,12 @@ async function checkApiStatus() {
         console.error('Error checking API status:', error);
         const badge = document.getElementById('account-badge');
         if (badge) {
-            badge.innerHTML = '⚠ Connection Error';
+            badge.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span>⚠ Connection Error</span>
+                    <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em;">Logout</button>
+                </div>
+            `;
             badge.style.background = 'rgba(158, 158, 158, 0.2)';
             badge.style.color = '#9e9e9e';
         }
