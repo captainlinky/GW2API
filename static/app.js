@@ -173,16 +173,30 @@ function showError(errorDiv, message) {
 }
 
 function updateUserBadge() {
-    const email = localStorage.getItem('user_email');
+    let email = localStorage.getItem('user_email');
     const badge = document.getElementById('account-badge');
 
-    if (badge && email) {
-        badge.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <span>${email}</span>
-                <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em;">Logout</button>
-            </div>
-        `;
+    if (badge) {
+        if (email) {
+            // Show badge with email and logout button
+            badge.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span>${email}</span>
+                    <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em;">Logout</button>
+                </div>
+            `;
+        } else {
+            // Token exists but no email in storage - show generic logout
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                badge.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span>Logged In</span>
+                        <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em;">Logout</button>
+                    </div>
+                `;
+            }
+        }
     }
 }
 
@@ -501,12 +515,21 @@ document.addEventListener('DOMContentLoaded', async function() {
 // Enhanced Dashboard Functions
 async function updateDashboardStats() {
     try {
-        // Get account info
-        const accountResponse = await authenticatedFetch('/gw2api/api/account');
-        const accountData = await accountResponse.json();
-        
-        if (accountData.data) {
-            document.getElementById('stat-account-name').textContent = accountData.data.name || 'N/A';
+        // Get account info (with timeout - don't block dashboard)
+        try {
+            const accountPromise = authenticatedFetch('/gw2api/api/account');
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Account fetch timeout')), 3000)
+            );
+            const accountResponse = await Promise.race([accountPromise, timeoutPromise]);
+            const accountData = await accountResponse.json();
+
+            if (accountData.data) {
+                document.getElementById('stat-account-name').textContent = accountData.data.name || 'N/A';
+            }
+        } catch (accError) {
+            console.warn('Account data skipped (no API key or timeout):', accError.message);
+            // Don't block dashboard if account fetch fails
         }
         
         // Get WvW match data from cache (with fast fail)
@@ -2727,21 +2750,20 @@ function setItemIds(ids) {
     document.getElementById('item-ids').value = ids;
 }
 
-async function loadTradingPost() {
-    const itemIds = document.getElementById('item-ids').value.trim();
-    
+async function loadTradingPost(itemIds = null) {
+    // If no itemIds provided, this is likely being called without a selected item
     if (!itemIds) {
-        showMessage('trading', 'Please enter item IDs', 'error');
+        showMessage('trading', 'Please search for and select an item first', 'error');
         return;
     }
-    
+
     const resultDiv = document.getElementById('trading-result');
     resultDiv.innerHTML = '<div class="loading"></div> Loading prices...';
-    
+
     try {
         const response = await authenticatedFetch(`/gw2api/api/tp/prices?ids=${encodeURIComponent(itemIds)}`);
         const data = await response.json();
-        
+
         if (data.status === 'success') {
             let html = '<h3>Trading Post Prices</h3>';
             html += '<table class="data-table"><thead><tr><th>Item</th><th>Buy Price</th><th>Sell Price</th><th>Spread</th><th>Supply</th><th>Demand</th><th>Action</th></tr></thead><tbody>';
@@ -2894,11 +2916,19 @@ async function searchItems(query) {
             resultsDiv.innerHTML = '<div style="padding: 15px;">Searching...</div>';
             resultsDiv.classList.add('active');
 
-            // Call backend search endpoint
-            const response = await authenticatedFetch(`/gw2api/api/items/search?q=${encodeURIComponent(query)}`);
+            // Call backend search endpoint with 30 second timeout (cache loads on first request)
+            const searchPromise = authenticatedFetch(`/gw2api/api/items/search?q=${encodeURIComponent(query)}`);
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Search timeout after 30s')), 30000)
+            );
+            const response = await Promise.race([searchPromise, timeoutPromise]);
             const data = await response.json();
 
-            if (data.status === 'success') {
+            if (data.status === 'loading') {
+                resultsDiv.innerHTML = '<div style="padding: 15px; color: #ff9800;"><strong>Loading Item Database</strong><br/>This is the first search. The item database is being loaded in the background.<br/>Please try again in 30-60 seconds when loading completes.</div>';
+                resultsDiv.classList.add('active');
+                return;
+            } else if (data.status === 'success') {
                 const matches = data.data;
 
                 if (matches.length === 0) {
@@ -2922,16 +2952,20 @@ async function searchItems(query) {
             resultsDiv.classList.add('active');
         } catch (error) {
             console.error('Error searching items:', error);
-            resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;">Search error</div>';
+            if (error.message.includes('timeout')) {
+                resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;"><strong>Search Loading (First Time)</strong><br/>The item database is loading on first search. This takes 30-60 seconds. Please wait and try again.</div>';
+            } else {
+                resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;">Search error: ' + error.message + '</div>';
+            }
         }
     }, 300); // 300ms debounce
 }
 
 function selectItem(itemId, itemName) {
-    document.getElementById('item-ids').value = itemId;
     document.getElementById('item-search').value = itemName;
     document.getElementById('item-search-results').classList.remove('active');
-    loadTradingPost();
+    switchTab('trading');
+    loadTradingPost(itemId.toString());
 }
 
 // Helper function to format dates
@@ -4233,20 +4267,20 @@ async function renderWarRoomMap(mapType) {
     // Complete wiki background images (full map coverage)
     const bgUrls = {
         'Center': {
-            low: '/static/maps/1024px-Eternal_Battlegrounds_map.jpg',
-            high: '/static/maps/1024px-Eternal_Battlegrounds_map.jpg'
+            low: '/gw2api/static/maps/1024px-Eternal_Battlegrounds_map.jpg',
+            high: '/gw2api/static/maps/1024px-Eternal_Battlegrounds_map.jpg'
         },
         'RedHome': {
-            low: '/static/maps/1024px-Red_Desert_Borderlands_map.jpg',
-            high: '/static/maps/1024px-Red_Desert_Borderlands_map.jpg'
+            low: '/gw2api/static/maps/1024px-Red_Desert_Borderlands_map.jpg',
+            high: '/gw2api/static/maps/1024px-Red_Desert_Borderlands_map.jpg'
         },
         'BlueHome': {
-            low: '/static/maps/800px-Blue_Alpine_Borderlands_map.jpg',
-            high: '/static/maps/800px-Blue_Alpine_Borderlands_map.jpg'
+            low: '/gw2api/static/maps/800px-Blue_Alpine_Borderlands_map.jpg',
+            high: '/gw2api/static/maps/800px-Blue_Alpine_Borderlands_map.jpg'
         },
         'GreenHome': {
-            low: '/static/maps/800px-Green_Alpine_Borderlands_map.jpg',
-            high: '/static/maps/800px-Green_Alpine_Borderlands_map.jpg'
+            low: '/gw2api/static/maps/800px-Green_Alpine_Borderlands_map.jpg',
+            high: '/gw2api/static/maps/800px-Green_Alpine_Borderlands_map.jpg'
         }
     };
 

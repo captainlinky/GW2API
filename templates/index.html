@@ -528,19 +528,6 @@
                             <input type="text" id="item-search" placeholder="Type item name (e.g., 'ecto', 'mystic coin')" class="input-text" oninput="searchItems(this.value)">
                         </div>
                         <div id="item-search-results" class="search-results"></div>
-
-                        <label style="margin-top: 20px;">Or Item IDs (comma-separated):</label>
-                        <div class="input-group">
-                            <input type="text" id="item-ids" placeholder="e.g., 19721, 24277, 19976" class="input-text">
-                            <button onclick="loadTradingPost()" class="btn btn-primary">Get Prices</button>
-                        </div>
-                        <div class="preset-items">
-                            <p>Common items:</p>
-                            <button onclick="setItemIds('19721')" class="btn btn-small">Glob of Ectoplasm</button>
-                            <button onclick="setItemIds('24277')" class="btn btn-small">Mystic Coin</button>
-                            <button onclick="setItemIds('19976')" class="btn btn-small">T6 Blood</button>
-                            <button onclick="setItemIds('19721,24277,19976')" class="btn btn-small">All Three</button>
-                        </div>
                     </div>
                 </div>
 

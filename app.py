@@ -1371,8 +1371,16 @@ def get_tp_economics(item_id):
     try:
         client = GW2API()
 
-        # Get detailed listings
-        listings_data = client.get_tp_listings([item_id])
+        # Get detailed listings with error handling
+        try:
+            listings_data = client.get_tp_listings([item_id])
+        except Exception as e:
+            logger.warning(f"[TP] Failed to get listings for item {item_id}: {e}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to fetch listing data: {str(e)}'
+            }), 503
+
         if not listings_data:
             return jsonify({
                 'status': 'error',
@@ -1381,12 +1389,20 @@ def get_tp_economics(item_id):
 
         listing = listings_data[0]
 
-        # Get item info
-        item_info = client.get_items([item_id])[0]
+        # Get item info with error handling
+        try:
+            item_info = client.get_items([item_id])[0]
+        except Exception as e:
+            logger.warning(f"[TP] Failed to get item info for {item_id}: {e}")
+            item_info = {'name': f'Item {item_id}', 'icon': '', 'rarity': 'Unknown'}
 
-        # Get basic prices
-        prices_data = client.get_tp_prices([item_id])
-        price_info = prices_data[0] if prices_data else {}
+        # Get basic prices with error handling
+        try:
+            prices_data = client.get_tp_prices([item_id])
+            price_info = prices_data[0] if prices_data else {}
+        except Exception as e:
+            logger.warning(f"[TP] Failed to get prices for item {item_id}: {e}")
+            price_info = {}
 
         # Extract buy and sell orders
         buy_orders = listing.get('buys', [])
@@ -1588,10 +1604,72 @@ item_search_cache = None
 item_search_cache_time = None
 item_search_lock = threading.Lock()
 
+def preload_item_search_cache():
+    """Pre-load items into PostgreSQL database (background thread)."""
+    try:
+        logger.info("[SEARCH] Populating items database...")
+        from database import get_db_connection
+
+        with item_search_lock:
+            client = GW2API()
+            all_ids = client.get_items()
+            logger.info(f"[SEARCH] Found {len(all_ids)} total items to load")
+
+            batch_size = 200
+            total_loaded = 0
+
+            for i in range(0, len(all_ids), batch_size):
+                batch = all_ids[i:i + batch_size]
+                try:
+                    items = client.get_items(batch)
+
+                    # Insert items into database
+                    with get_db_connection() as conn:
+                        cur = conn.cursor()
+                        for item in items:
+                            flags = item.get('flags', [])
+                            # Only insert tradeable items
+                            if 'AccountBound' not in flags and 'SoulbindOnAcquire' not in flags:
+                                try:
+                                    cur.execute("""
+                                        INSERT INTO items (id, name, icon, rarity, level, type, last_updated)
+                                        VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                                        ON CONFLICT (id) DO UPDATE SET
+                                            name = EXCLUDED.name,
+                                            icon = EXCLUDED.icon,
+                                            rarity = EXCLUDED.rarity,
+                                            level = EXCLUDED.level,
+                                            type = EXCLUDED.type,
+                                            last_updated = CURRENT_TIMESTAMP
+                                    """, (
+                                        item['id'],
+                                        item['name'],
+                                        item.get('icon', ''),
+                                        item.get('rarity', ''),
+                                        item.get('level', 0),
+                                        item.get('type', '')
+                                    ))
+                                    total_loaded += 1
+                                except Exception as e:
+                                    logger.warning(f"[SEARCH] Failed to insert item {item.get('id')}: {e}")
+                        conn.commit()
+
+                    batch_num = i // batch_size + 1
+                    total_batches = (len(all_ids) + batch_size - 1) // batch_size
+                    logger.info(f"[SEARCH] Loaded batch {batch_num}/{total_batches}: {total_loaded} tradeable items in DB")
+
+                except Exception as e:
+                    logger.warning(f"[SEARCH] Failed to fetch batch {i//batch_size + 1}: {e}")
+                    continue
+
+            logger.info(f"[SEARCH] Completed: {total_loaded} tradeable items in database")
+    except Exception as e:
+        logger.error(f"[SEARCH] Failed to populate items database: {e}", exc_info=True)
+
 @app.route('/api/items/search')
 def search_items():
-    """Search for items by name."""
-    global item_search_cache, item_search_cache_time
+    """Search for items by name from PostgreSQL database."""
+    from database import get_db_connection
 
     query = request.args.get('q', '').strip().lower()
 
@@ -1602,62 +1680,49 @@ def search_items():
         }), 400
 
     try:
-        # Check if cache needs refresh (6 hours)
-        cache_age = None
-        if item_search_cache_time:
-            cache_age = (datetime.utcnow() - item_search_cache_time).total_seconds()
+        # Check if database has any items
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM items")
+            item_count = cur.fetchone()[0]
 
-        if not item_search_cache or not cache_age or cache_age > 21600:  # 6 hours
-            with item_search_lock:
-                # Double-check after acquiring lock
-                if not item_search_cache or not cache_age or cache_age > 21600:
-                    logger.info("[SEARCH] Refreshing item search cache...")
-                    client = GW2API()
+        # If no items in database, populate it in background
+        if item_count == 0:
+            logger.info("[SEARCH] No items in database, populating...")
+            if not item_search_lock.locked():
+                cache_load_thread = threading.Thread(target=preload_item_search_cache, daemon=True)
+                cache_load_thread.start()
 
-                    # Get all item IDs
-                    all_ids = client.get_items()
-                    logger.info(f"[SEARCH] Found {len(all_ids)} total items")
+            return jsonify({
+                'status': 'loading',
+                'message': 'Item database is being populated. This happens on first search. Please try again in 2-3 minutes.',
+                'data': []
+            }), 202  # 202 Accepted
 
-                    # Fetch items in batches of 200
-                    batch_size = 200
-                    all_items = []
+        # Query database for matching items
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT id, name, icon, rarity, level, type
+                FROM items
+                WHERE LOWER(name) LIKE %s
+                ORDER BY name ASC
+                LIMIT 20
+            """, (f'%{query}%',))
 
-                    for i in range(0, len(all_ids), batch_size):
-                        batch = all_ids[i:i + batch_size]
-                        try:
-                            items = client.get_items(batch)
-                            all_items.extend(items)
-                        except Exception as e:
-                            logger.warning(f"[SEARCH] Failed to fetch batch {i//batch_size + 1}: {e}")
-                            continue
+            rows = cur.fetchall()
 
-                    # Filter to only tradeable items (have trading post data)
-                    tradeable_items = []
-                    for item in all_items:
-                        # Include if item has flags indicating it's tradeable
-                        flags = item.get('flags', [])
-                        if 'AccountBound' not in flags and 'SoulbindOnAcquire' not in flags:
-                            tradeable_items.append({
-                                'id': item['id'],
-                                'name': item['name'],
-                                'icon': item.get('icon', ''),
-                                'rarity': item.get('rarity', ''),
-                                'level': item.get('level', 0),
-                                'type': item.get('type', '')
-                            })
-
-                    item_search_cache = tradeable_items
-                    item_search_cache_time = datetime.utcnow()
-                    logger.info(f"[SEARCH] Cached {len(tradeable_items)} tradeable items")
-
-        # Search cache
         matches = [
-            item for item in item_search_cache
-            if query in item['name'].lower()
+            {
+                'id': row[0],
+                'name': row[1],
+                'icon': row[2],
+                'rarity': row[3],
+                'level': row[4],
+                'type': row[5]
+            }
+            for row in rows
         ]
-
-        # Limit to top 20 results
-        matches = matches[:20]
 
         return jsonify({
             'status': 'success',
@@ -2900,6 +2965,9 @@ if __name__ == '__main__':
     print("\n  Starting server at http://localhost:5555")
     print("  Press Ctrl+C to stop\n")
     print("=" * 60)
+
+    # NOTE: Item search cache pre-loading disabled - it causes GW2 API timeouts on startup
+    # The cache is loaded on-demand when first search is performed
 
     # Start tracking thread after Flask initialization
     kdr_thread = threading.Thread(target=kdr_tracking_loop, daemon=True)
