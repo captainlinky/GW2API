@@ -1,0 +1,19 @@
+[Unit]
+Description=GW2API Multi-Tenant Service
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/home/GW2API/GW2API
+Environment="PATH=/home/GW2API/GW2API/venv/bin"
+EnvironmentFile=/home/GW2API/GW2API/.env.production
+ExecStart=/home/GW2API/GW2API/venv/bin/python3 /home/GW2API/GW2API/app.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

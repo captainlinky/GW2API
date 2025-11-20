@@ -1,5 +1,227 @@
 // GW2 API Tool - JavaScript
 
+// ============= AUTHENTICATION FUNCTIONS =============
+
+// Check if user is logged in on page load
+window.addEventListener('DOMContentLoaded', function() {
+    checkAuthStatus();
+});
+
+function checkAuthStatus() {
+    const token = localStorage.getItem('auth_token');
+    const authModal = document.getElementById('auth-modal');
+    const container = document.querySelector('.container');
+
+    if (token) {
+        // User is logged in
+        hideAuthModal();
+        showMainContent();
+        updateUserBadge();
+    } else {
+        // User is not logged in
+        showAuthModal();
+        hideMainContent();
+    }
+}
+
+function hideAuthModal() {
+    const authModal = document.getElementById('auth-modal');
+    if (authModal) {
+        authModal.classList.remove('active');
+    }
+}
+
+function showAuthModal() {
+    const authModal = document.getElementById('auth-modal');
+    if (authModal) {
+        authModal.classList.add('active');
+    }
+}
+
+function hideMainContent() {
+    const container = document.querySelector('.container');
+    if (container) {
+        container.classList.add('hidden');
+    }
+}
+
+function showMainContent() {
+    const container = document.querySelector('.container');
+    if (container) {
+        container.classList.remove('hidden');
+    }
+}
+
+function switchToLogin() {
+    document.getElementById('login-form').classList.add('active');
+    document.getElementById('register-form').classList.remove('active');
+    document.getElementById('login-error').classList.remove('show');
+    document.getElementById('register-error').classList.remove('show');
+}
+
+function switchToRegister() {
+    document.getElementById('login-form').classList.remove('active');
+    document.getElementById('register-form').classList.add('active');
+    document.getElementById('login-error').classList.remove('show');
+    document.getElementById('register-error').classList.remove('show');
+}
+
+async function handleLogin() {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const errorDiv = document.getElementById('login-error');
+
+    errorDiv.classList.remove('show');
+    errorDiv.textContent = '';
+
+    if (!email || !password) {
+        showError(errorDiv, 'Email and password are required');
+        return;
+    }
+
+    try {
+        const response = await fetch('/gw2api/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            // Store token
+            localStorage.setItem('auth_token', data.data.token);
+            localStorage.setItem('user_email', data.data.email);
+
+            // Clear forms
+            document.getElementById('login-email').value = '';
+            document.getElementById('login-password').value = '';
+
+            // Show main content
+            hideAuthModal();
+            showMainContent();
+            updateUserBadge();
+        } else {
+            showError(errorDiv, data.message || 'Login failed');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        showError(errorDiv, 'Login failed: ' + error.message);
+    }
+}
+
+async function handleRegister() {
+    const email = document.getElementById('register-email').value;
+    const password = document.getElementById('register-password').value;
+    const confirm = document.getElementById('register-confirm').value;
+    const errorDiv = document.getElementById('register-error');
+
+    errorDiv.classList.remove('show');
+    errorDiv.textContent = '';
+
+    // Validation
+    if (!email || !password || !confirm) {
+        showError(errorDiv, 'All fields are required');
+        return;
+    }
+
+    if (password.length < 8) {
+        showError(errorDiv, 'Password must be at least 8 characters');
+        return;
+    }
+
+    if (password !== confirm) {
+        showError(errorDiv, 'Passwords do not match');
+        return;
+    }
+
+    try {
+        const response = await fetch('/gw2api/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            // Store token
+            localStorage.setItem('auth_token', data.data.token);
+            localStorage.setItem('user_email', data.data.email);
+
+            // Clear forms
+            document.getElementById('register-email').value = '';
+            document.getElementById('register-password').value = '';
+            document.getElementById('register-confirm').value = '';
+
+            // Show main content
+            hideAuthModal();
+            showMainContent();
+            updateUserBadge();
+        } else {
+            showError(errorDiv, data.message || 'Registration failed');
+        }
+    } catch (error) {
+        console.error('Registration error:', error);
+        showError(errorDiv, 'Registration failed: ' + error.message);
+    }
+}
+
+function showError(errorDiv, message) {
+    errorDiv.textContent = message;
+    errorDiv.classList.add('show');
+}
+
+function updateUserBadge() {
+    const email = localStorage.getItem('user_email');
+    const badge = document.getElementById('account-badge');
+
+    if (badge && email) {
+        badge.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span>${email}</span>
+                <button onclick="handleLogout()" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em;">Logout</button>
+            </div>
+        `;
+    }
+}
+
+function handleLogout() {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_email');
+    location.reload();
+}
+
+// Authenticated fetch wrapper
+async function authenticatedFetch(url, options = {}) {
+    const token = localStorage.getItem('auth_token');
+
+    if (!token) {
+        throw new Error('Not authenticated');
+    }
+
+    const headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`
+    };
+
+    const response = await fetch(url, {
+        ...options,
+        headers
+    });
+
+    if (response.status === 401) {
+        // Token expired or invalid
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_email');
+        location.reload();
+    }
+
+    return response;
+}
+
+// ============= END AUTHENTICATION FUNCTIONS =============
+
 // Global polling configuration
 let dashboardPollingInterval = null;
 let currentDashboardInterval = 60; // default 60 seconds
@@ -32,7 +254,7 @@ window.GW2Data = {
         console.log('Loading fresh match data');
         const startTime = performance.now();
         this.loadingMatch = Promise.race([
-            fetch(`/api/wvw/match/${worldId}`).then(response => response.json()),
+            fetch(`/gw2api/api/wvw/match/${worldId}`).then(response => response.json()),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout after 15s')), 15000))
         ])
             .then(data => {
@@ -85,7 +307,7 @@ window.GW2Data = {
             return this.mapsMeta[mapId];
         }
         console.log('Loading map meta for', mapId);
-        const resp = await fetch(`/api/proxy/maps/${mapId}`);
+        const resp = await fetch(`/gw2api/api/proxy/maps/${mapId}`);
         if (resp.ok) {
             const result = await resp.json();
             // Handle backend response format: {status: 'success', data: {...}}
@@ -112,7 +334,7 @@ let skirmishTimerInterval = null;
 
 async function updateEnhancedWvWStats() {
     try {
-        const response = await fetch('/api/wvw/stats/1020');
+        const response = await fetch('/gw2api/api/wvw/stats/1020');
         const data = await response.json();
 
         if (data.status === 'success') {
@@ -235,7 +457,7 @@ function startDashboardPolling(intervalSeconds) {
 // Load polling configuration from server
 async function loadPollingConfig() {
     try {
-        const response = await fetch('/api/polling-config');
+        const response = await fetch('/gw2api/api/polling-config');
         const data = await response.json();
 
         if (data.status === 'success') {
@@ -280,7 +502,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function updateDashboardStats() {
     try {
         // Get account info
-        const accountResponse = await fetch('/api/account');
+        const accountResponse = await authenticatedFetch('/gw2api/api/account');
         const accountData = await accountResponse.json();
         
         if (accountData.data) {
@@ -423,7 +645,7 @@ function updateMatchOverview(match, myColor) {
 
 async function updateTeamBars() {
     try {
-        const matchesResponse = await fetch('/api/wvw/active-matches');
+        const matchesResponse = await fetch('/gw2api/api/wvw/active-matches');
         const matchesData = await matchesResponse.json();
         
         if (matchesData.status === 'success' && matchesData.matches) {
@@ -438,7 +660,7 @@ async function updateTeamBars() {
             }
             
             if (myWorldMatch && myWorldMatch.match_id) {
-                const trackedResponse = await fetch(`/api/wvw/tracked-guilds/${myWorldMatch.match_id}`);
+                const trackedResponse = await fetch(`/gw2api/api/wvw/tracked-guilds/${myWorldMatch.match_id}`);
                 const trackedData = await trackedResponse.json();
 
                 // Check if match has expired (410 Gone status)
@@ -601,7 +823,7 @@ let activityTimeWindow = '6h';  // Default time window
 
 async function updateActivityTimeline() {
     try {
-        const response = await fetch(`/api/wvw/activity/1020?window=${activityTimeWindow}`);
+        const response = await fetch(`/gw2api/api/wvw/activity/1020?window=${activityTimeWindow}`);
         const data = await response.json();
         
         if (data.status === 'success' && data.timeline) {
@@ -987,7 +1209,7 @@ let kdrTimeWindow = '6h';  // Default time window
 
 async function updateKDRTimeline() {
     try {
-        const response = await fetch(`/api/wvw/kdr/1020?window=${kdrTimeWindow}`);
+        const response = await fetch(`/gw2api/api/wvw/kdr/1020?window=${kdrTimeWindow}`);
         const data = await response.json();
         
         if (data.status === 'success' && data.timeline) {
@@ -1401,7 +1623,7 @@ let pptTimeWindow = '6h';  // Default time window
 
 async function updatePPTTimeline() {
     try {
-        const response = await fetch(`/api/wvw/ppt/1020?window=${pptTimeWindow}`);
+        const response = await fetch(`/gw2api/api/wvw/ppt/1020?window=${pptTimeWindow}`);
         const data = await response.json();
 
         if (data.status === 'success' && data.timeline) {
@@ -1794,7 +2016,7 @@ async function loadTrackedGuildsQuick() {
     
     try {
         // First, get active matches
-        const matchesResponse = await fetch('/api/wvw/active-matches');
+        const matchesResponse = await fetch('/gw2api/api/wvw/active-matches');
         const matchesData = await matchesResponse.json();
         
         if (matchesData.status !== 'success' || Object.keys(matchesData.matches).length === 0) {
@@ -1812,7 +2034,7 @@ async function loadTrackedGuildsQuick() {
         currentMatchId = matchId;
         
         // Fetch tracked guilds for this match
-        const guildsResponse = await fetch(`/api/wvw/tracked-guilds/${matchId}`);
+        const guildsResponse = await fetch(`/gw2api/api/wvw/tracked-guilds/${matchId}`);
         const guildsData = await guildsResponse.json();
 
         // Check if match has expired
@@ -2066,7 +2288,7 @@ function switchTab(tabName) {
 // API Status Check
 async function checkApiStatus() {
     try {
-        const response = await fetch('/api/status');
+        const response = await fetch('/gw2api/api/status');
         const data = await response.json();
 
         const badge = document.getElementById('account-badge');
@@ -2103,7 +2325,7 @@ async function checkApiStatus() {
 // Settings - API Key Management
 async function updateKeyStatus() {
     try {
-        const response = await fetch('/api/key');
+        const response = await authenticatedFetch('/gw2api/api/key');
         const data = await response.json();
         
         const statusDiv = document.getElementById('current-key-status');
@@ -2134,7 +2356,7 @@ async function saveApiKey() {
     }
     
     try {
-        const response = await fetch('/api/key', {
+        const response = await fetch('/gw2api/api/key', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -2162,7 +2384,7 @@ async function deleteApiKey() {
     }
 
     try {
-        const response = await fetch('/api/key', {
+        const response = await fetch('/gw2api/api/key', {
             method: 'DELETE'
         });
 
@@ -2221,7 +2443,7 @@ async function savePollingConfig() {
     }
 
     try {
-        const response = await fetch('/api/polling-config', {
+        const response = await fetch('/gw2api/api/polling-config', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -2276,7 +2498,7 @@ async function loadAccountDetails() {
     resultDiv.innerHTML = '<div class="loading"></div> Loading account information...';
     
     try {
-        const response = await fetch('/api/account');
+        const response = await authenticatedFetch('/gw2api/api/account');
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -2311,7 +2533,7 @@ async function loadWallet() {
     resultDiv.innerHTML = '<div class="loading"></div> Loading wallet...';
     
     try {
-        const response = await fetch('/api/wallet');
+        const response = await authenticatedFetch('/gw2api/api/wallet');
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -2346,7 +2568,7 @@ async function loadCharacterList() {
     resultDiv.innerHTML = '';
 
     try {
-        const response = await fetch('/api/characters');
+        const response = await authenticatedFetch('/gw2api/api/characters');
         const data = await response.json();
 
         if (data.status === 'success') {
@@ -2395,7 +2617,7 @@ async function loadCharacterDetails(name) {
     resultDiv.innerHTML = '<div class="loading"></div> Loading character details...';
     
     try {
-        const response = await fetch(`/api/character/${encodeURIComponent(name)}`);
+        const response = await authenticatedFetch(`/gw2api/api/character/${encodeURIComponent(name)}`);
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -2427,7 +2649,7 @@ async function loadMaterials() {
     resultDiv.innerHTML = '<div class="loading"></div> Loading materials...';
     
     try {
-        const response = await fetch('/api/materials');
+        const response = await authenticatedFetch('/gw2api/api/materials');
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -2457,7 +2679,7 @@ async function loadBank() {
     resultDiv.innerHTML = '<div class="loading"></div> Loading bank...';
 
     try {
-        const response = await fetch('/api/bank');
+        const response = await authenticatedFetch('/gw2api/api/bank');
         const data = await response.json();
 
         if (data.status === 'success') {
@@ -2517,7 +2739,7 @@ async function loadTradingPost() {
     resultDiv.innerHTML = '<div class="loading"></div> Loading prices...';
     
     try {
-        const response = await fetch(`/api/tp/prices?ids=${encodeURIComponent(itemIds)}`);
+        const response = await authenticatedFetch(`/gw2api/api/tp/prices?ids=${encodeURIComponent(itemIds)}`);
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -2586,7 +2808,7 @@ async function loadTPTransactions(transactionType) {
     resultDiv.innerHTML = '<div class="loading"></div> Loading transactions...';
 
     try {
-        const response = await fetch(`/api/tp/transactions/${transactionType}`);
+        const response = await authenticatedFetch(`/gw2api/api/tp/transactions/${transactionType}`);
         const data = await response.json();
 
         if (data.status === 'success') {
@@ -2673,7 +2895,7 @@ async function searchItems(query) {
             resultsDiv.classList.add('active');
 
             // Call backend search endpoint
-            const response = await fetch(`/api/items/search?q=${encodeURIComponent(query)}`);
+            const response = await authenticatedFetch(`/gw2api/api/items/search?q=${encodeURIComponent(query)}`);
             const data = await response.json();
 
             if (data.status === 'success') {
@@ -2737,7 +2959,7 @@ async function loadAllWvWMatches() {
     resultDiv.innerHTML = '<div class="loading"></div> Loading all WvW matches...';
     
     try {
-        const response = await fetch('/api/wvw/matches');
+        const response = await fetch('/gw2api/api/wvw/matches');
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -2816,7 +3038,7 @@ async function loadSpecificWorldMatch() {
     resultDiv.innerHTML = '<div class="loading"></div> Loading match for world ' + worldId + '...';
     
     try {
-        const response = await fetch(`/api/wvw/match/${worldId}`);
+        const response = await fetch(`/gw2api/api/wvw/match/${worldId}`);
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -3043,7 +3265,7 @@ async function executeCustomQuery() {
     resultDiv.innerHTML = '<div class="loading"></div> Executing query...';
     
     try {
-        const response = await fetch('/api/query', {
+        const response = await fetch('/gw2api/api/query', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -3082,7 +3304,7 @@ async function loadTrackedGuilds() {
     
     try {
         // First, get active matches
-        const matchesResponse = await fetch('/api/wvw/active-matches');
+        const matchesResponse = await fetch('/gw2api/api/wvw/active-matches');
         const matchesData = await matchesResponse.json();
         
         if (matchesData.status !== 'success' || Object.keys(matchesData.matches).length === 0) {
@@ -3100,7 +3322,7 @@ async function loadTrackedGuilds() {
         currentMatchId = matchId;
         
         // Fetch tracked guilds for this match
-        const guildsResponse = await fetch(`/api/wvw/tracked-guilds/${matchId}`);
+        const guildsResponse = await fetch(`/gw2api/api/wvw/tracked-guilds/${matchId}`);
         const guildsData = await guildsResponse.json();
         
         if (guildsData.status === 'success') {
@@ -3236,7 +3458,7 @@ async function loadInventoryCharacters() {
     selectElement.innerHTML = '<option value="">Loading...</option>';
 
     try {
-        const response = await fetch('/api/characters');
+        const response = await authenticatedFetch('/gw2api/api/characters');
         console.log('Characters API response status:', response.status);
         const data = await response.json();
         console.log('Characters API data:', data);
@@ -3275,7 +3497,7 @@ async function loadCharacterInventory() {
     try {
         // Encode character name for URL
         const encodedName = encodeURIComponent(characterName);
-        const response = await fetch('/api/character/' + encodedName);
+        const response = await authenticatedFetch('/gw2api/api/character/' + encodedName);
         const data = await response.json();
 
         if (data.status === 'success' && data.data) {
@@ -3331,8 +3553,8 @@ async function loadBankInventory() {
     try {
         // Load both bank and materials in parallel
         const [bankResponse, materialsResponse] = await Promise.all([
-            fetch('/api/bank'),
-            fetch('/api/materials')
+            authenticatedFetch('/gw2api/api/bank'),
+            authenticatedFetch('/gw2api/api/materials')
         ]);
 
         const bankData = await bankResponse.json();
@@ -3429,10 +3651,10 @@ async function displayInventoryItems(items, title) {
 
         // Fetch all batches in parallel
         const itemsPromises = itemBatches.map(batch =>
-            fetch('/api/items?ids=' + batch.join(',')).then(r => r.json())
+            fetch('/gw2api/api/items?ids=' + batch.join(',')).then(r => r.json())
         );
         const pricesPromises = itemBatches.map(batch =>
-            fetch('/api/tp/prices?ids=' + batch.join(',')).then(r => r.json())
+            fetch('/gw2api/api/tp/prices?ids=' + batch.join(',')).then(r => r.json())
         );
 
         const [itemsResults, pricesResults] = await Promise.all([
@@ -3617,7 +3839,7 @@ async function showInventoryTooltip(event, itemId) {
 
     try {
         // Fetch price history (for now just show current prices)
-        const response = await fetch('/api/tp/prices?ids=' + itemId);
+        const response = await fetch('/gw2api/api/tp/prices?ids=' + itemId);
         const data = await response.json();
 
         if (data.status === 'success' && data.data && data.data.length > 0) {
@@ -3676,7 +3898,7 @@ async function searchAllInventories() {
 
     try {
         // Get all characters
-        const charsResponse = await fetch('/api/characters');
+        const charsResponse = await fetch('/gw2api/api/characters');
         const charsData = await charsResponse.json();
 
         if (charsData.status !== 'success') {
@@ -3689,7 +3911,7 @@ async function searchAllInventories() {
 
         for (const charName of charsData.data) {
             const encodedName = encodeURIComponent(charName);
-            const charResponse = await fetch('/api/character/' + encodedName);
+            const charResponse = await fetch('/gw2api/api/character/' + encodedName);
             const charData = await charResponse.json();
 
             if (charData.status === 'success' && charData.data && charData.data.bags) {
@@ -3710,7 +3932,7 @@ async function searchAllInventories() {
         }
 
         // Get bank items
-        const bankResponse = await fetch('/api/bank');
+        const bankResponse = await fetch('/gw2api/api/bank');
         const bankData = await bankResponse.json();
 
         if (bankData.status === 'success' && bankData.data) {
@@ -3744,7 +3966,7 @@ async function searchAllInventories() {
 
         // Fetch all batches in parallel
         const itemsPromises = itemBatches.map(batch =>
-            fetch('/api/items?ids=' + batch.join(',')).then(r => r.json())
+            fetch('/gw2api/api/items?ids=' + batch.join(',')).then(r => r.json())
         );
 
         const itemsResults = await Promise.all(itemsPromises);
@@ -3837,7 +4059,7 @@ async function initWarRoomMaps() {
 
         // Load polling config and start auto-refresh
         try {
-            const response = await fetch('/api/polling-config');
+            const response = await fetch('/gw2api/api/polling-config');
             const data = await response.json();
             if (data.status === 'success') {
                 startWarRoomAutoRefresh(data.config.maps_interval);
@@ -4275,7 +4497,7 @@ async function refreshCaptureEvents() {
     try {
         feedContainer.innerHTML = '<p style="text-align: center; padding: 20px;"><span class="loading"></span> Loading capture events...</p>';
 
-        const response = await fetch(`/api/wvw/activity/1020`);
+        const response = await fetch(`/gw2api/api/wvw/activity/1020`);
         const data = await response.json();
 
         if (data.status !== 'success') {
@@ -4561,7 +4783,7 @@ async function loadItemEconomics(itemId) {
         section.style.display = 'block';
         section.innerHTML = '<p style="text-align: center; padding: 40px;"><span class="loading"></span> Loading market analysis...</p>';
 
-        const response = await fetch(`/api/tp/economics/${itemId}`);
+        const response = await authenticatedFetch(`/gw2api/api/tp/economics/${itemId}`);
         const data = await response.json();
 
         if (data.status !== 'success') {

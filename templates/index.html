@@ -8,18 +8,79 @@
     <title>GW2 WvW Command Center</title>
 
     <!-- Favicons -->
-    <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
-    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/static/icon-512.png">
-    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="/gw2api/static/icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="/gw2api/static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/gw2api/static/icon-512.png">
+    <link rel="apple-touch-icon" href="/gw2api/static/icon-192.png">
 
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/static/manifest.json">
+    <link rel="manifest" href="/gw2api/static/manifest.json">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/gw2api/static/style.css">
 </head>
 <body>
+    <!-- Login/Register Modal -->
+    <div id="auth-modal" class="modal active">
+        <div class="modal-content">
+            <div class="auth-container">
+                <h1>⚔️ GW2 WvW Command Center</h1>
+
+                <!-- Login Form -->
+                <div id="login-form" class="auth-form active">
+                    <h2>Login</h2>
+                    <div id="login-error" class="error-message"></div>
+
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input type="email" id="login-email" placeholder="your@email.com" class="input-text">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" placeholder="••••••••" class="input-text">
+                    </div>
+
+                    <button onclick="handleLogin()" class="btn btn-primary btn-block">Login</button>
+
+                    <p style="text-align: center; margin-top: 20px;">
+                        Don't have an account?
+                        <button onclick="switchToRegister()" class="btn-link">Register here</button>
+                    </p>
+                </div>
+
+                <!-- Register Form -->
+                <div id="register-form" class="auth-form">
+                    <h2>Create Account</h2>
+                    <div id="register-error" class="error-message"></div>
+
+                    <div class="form-group">
+                        <label for="register-email">Email</label>
+                        <input type="email" id="register-email" placeholder="your@email.com" class="input-text">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-password">Password</label>
+                        <input type="password" id="register-password" placeholder="••••••••" class="input-text">
+                        <small>Minimum 8 characters</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-confirm">Confirm Password</label>
+                        <input type="password" id="register-confirm" placeholder="••••••••" class="input-text">
+                    </div>
+
+                    <button onclick="handleRegister()" class="btn btn-primary btn-block">Register</button>
+
+                    <p style="text-align: center; margin-top: 20px;">
+                        Already have an account?
+                        <button onclick="switchToLogin()" class="btn-link">Login here</button>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <!-- Header -->
         <header class="header">
@@ -672,7 +733,7 @@
         </main>
     </div>
 
-    <script src="/static/app.js?v=2025111903"></script>
-    <script src="/static/wvw-maps.js"></script>
+    <script src="/gw2api/static/app.js?v=2025111903"></script>
+    <script src="/gw2api/static/wvw-maps.js"></script>
 </body>
 </html>

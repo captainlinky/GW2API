@@ -88,6 +88,100 @@ def get_alliance_display_name(world_id, world_name):
     # Fall back to world name from API
     return world_name
 
+
+# ============= MULTI-TENANT HELPER FUNCTIONS =============
+
+def get_user_api_key(user_id):
+    """
+    Get the decrypted API key for a user from database or fallback.
+
+    Args:
+        user_id: The user's ID
+
+    Returns:
+        The decrypted API key string, or None if not found
+    """
+    try:
+        from crypto_utils import get_user_api_key as db_get_user_api_key
+        return db_get_user_api_key(user_id)
+    except Exception as e:
+        logger.warning(f"Could not retrieve user API key from database: {e}")
+        # Fallback to environment variable for single-user mode
+        return os.getenv('GW2_API_KEY')
+
+
+def get_current_api_key():
+    """
+    Get the current API key from request context or environment.
+
+    This function:
+    1. Checks if user_id is in request context (from @require_auth)
+    2. Gets the user's API key from database
+    3. Falls back to environment variable for single-user mode
+
+    Returns:
+        The API key string
+
+    Raises:
+        ValueError if no API key is available
+    """
+    # Check if authenticated user_id is in request context
+    user_id = getattr(request, 'user_id', None)
+
+    if user_id:
+        api_key = get_user_api_key(user_id)
+        if api_key:
+            return api_key
+
+    # Fallback to environment variable
+    api_key = os.getenv('GW2_API_KEY')
+    if api_key:
+        return api_key
+
+    raise ValueError("No API key available. Please configure an API key.")
+
+
+def require_auth(f):
+    """
+    Decorator to require JWT authentication on a route.
+
+    Validates the JWT token from the Authorization header and injects
+    user_id into request context for use in route handlers.
+
+    Usage:
+        @app.route('/api/protected')
+        @require_auth
+        def protected_route():
+            user_id = request.user_id  # Available after decorator
+            return jsonify({'user_id': user_id})
+    """
+    from functools import wraps
+    from auth import verify_token
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'status': 'error', 'message': 'Missing or invalid authorization header'}), 401
+
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+
+        try:
+            payload = verify_token(token)
+            request.user_id = payload['user_id']
+            return f(*args, **kwargs)
+        except ValueError as e:
+            return jsonify({'status': 'error', 'message': str(e)}), 401
+        except Exception as e:
+            logger.error(f"Authentication error: {e}", exc_info=True)
+            return jsonify({'status': 'error', 'message': 'Authentication failed'}), 401
+
+    return decorated
+
+
+# ============= END MULTI-TENANT HELPERS =============
+
 # K/D History tracking
 KDR_HISTORY_FILE = 'kdr_history.json'
 kdr_history_lock = threading.Lock()
@@ -533,8 +627,8 @@ def kdr_tracking_loop():
         except Exception as e:
             logger.error(f"Tracking loop error: {e}")
 
-        # Wait 15 minutes before next snapshot
-        time.sleep(15 * 60)
+        # Wait 5 minutes before next snapshot
+        time.sleep(5 * 60)
 
 
 # Add cache control headers to prevent browser caching during development
@@ -587,8 +681,8 @@ def save_api_key(api_key):
 def get_polling_config():
     """Get the current polling configuration from environment."""
     return {
-        'dashboard_interval': int(os.getenv('POLLING_DASHBOARD_INTERVAL', '60')),
-        'maps_interval': int(os.getenv('POLLING_MAPS_INTERVAL', '30'))
+        'dashboard_interval': int(os.getenv('POLLING_DASHBOARD_INTERVAL', '30')),
+        'maps_interval': int(os.getenv('POLLING_MAPS_INTERVAL', '15'))
     }
 
 
@@ -619,6 +713,152 @@ def format_response(data, format_type='json'):
 
 
 # Routes
+
+# ============= AUTHENTICATION ROUTES (Multi-Tenant) =============
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """Register a new user account."""
+    try:
+        from auth import create_user
+
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({'status': 'error', 'message': 'Email and password required'}), 400
+
+        if len(password) < 8:
+            return jsonify({'status': 'error', 'message': 'Password must be at least 8 characters'}), 400
+
+        result = create_user(email, password)
+
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'token': result['token'],
+                'user_id': result['user_id'],
+                'email': result['email']
+            }
+        })
+
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Registration error: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'Registration failed'}), 500
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Authenticate user and return JWT token."""
+    try:
+        from auth import authenticate_user
+
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({'status': 'error', 'message': 'Email and password required'}), 400
+
+        result = authenticate_user(email, password)
+
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'token': result['token'],
+                'user_id': result['user_id'],
+                'email': result['email']
+            }
+        })
+
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 401
+    except Exception as e:
+        logger.error(f"Login error: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'Login failed'}), 500
+
+
+@app.route('/api/user/api-key', methods=['POST'])
+def add_user_api_key():
+    """Add or update user's GW2 API key."""
+    try:
+        from auth import require_auth
+        from crypto_utils import encrypt_api_key
+        from database import query_one, execute
+
+        # Check authentication manually first
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'status': 'error', 'message': 'No authentication token provided'}), 401
+
+        # For now, extract user_id from request if multi-tenant is enabled
+        # In production, you'd use @require_auth decorator
+        user_id = getattr(request, 'user_id', None)
+        if not user_id:
+            # Fallback: support single-user mode
+            user_id = 1  # Default single user
+
+        data = request.get_json()
+        api_key = data.get('api_key')
+        key_name = data.get('name', 'Default Key')
+
+        if not api_key:
+            return jsonify({'status': 'error', 'message': 'API key required'}), 400
+
+        # Validate API key by testing it
+        test_client = GW2API(api_key=api_key)
+        try:
+            account = test_client.get_account()
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': 'Invalid API key'}), 400
+
+        # Try to encrypt and store if database is configured
+        try:
+            encrypted_key = encrypt_api_key(api_key)
+
+            # Check if user already has a key
+            existing = query_one(
+                "SELECT id FROM user_api_keys WHERE user_id = %s",
+                (user_id,)
+            )
+
+            if existing:
+                # Update existing
+                execute(
+                    "UPDATE user_api_keys SET api_key_encrypted = %s, api_key_name = %s, last_used = NOW() WHERE user_id = %s",
+                    (encrypted_key, key_name, user_id)
+                )
+            else:
+                # Insert new
+                execute(
+                    "INSERT INTO user_api_keys (user_id, api_key_encrypted, api_key_name) VALUES (%s, %s, %s)",
+                    (user_id, encrypted_key, key_name)
+                )
+        except Exception as e:
+            logger.warning(f"Could not store API key in database: {e}")
+            # Fallback to environment variable in single-user mode
+            if not os.environ.get('GW2_API_KEY'):
+                set_key(find_dotenv(), 'GW2_API_KEY', api_key)
+
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'account_name': account.get('name'),
+                'key_name': key_name
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error adding API key: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'Failed to add API key'}), 500
+
+
+# ============= END AUTHENTICATION ROUTES =============
+
+
 @app.route('/')
 def index():
     """Main dashboard."""
@@ -778,21 +1018,29 @@ def polling_config_management():
 
 
 @app.route('/api/account')
+@require_auth
 def get_account():
-    """Get account information."""
+    """Get account information (requires authentication)."""
     try:
-        client = GW2API()
+        api_key = get_current_api_key()
+        client = GW2API(api_key=api_key)
         account = client.get_account()
-        
+
         # Enrich with additional calculations
         account['age_hours'] = account['age'] // 3600
         account['age_days'] = account['age'] // 86400
-        
+
         return jsonify({
             'status': 'success',
             'data': account
         })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 401
     except Exception as e:
+        logger.error(f"Error fetching account: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -800,16 +1048,24 @@ def get_account():
 
 
 @app.route('/api/characters')
+@require_auth
 def get_characters():
-    """Get characters list."""
+    """Get characters list (requires authentication)."""
     try:
-        client = GW2API()
+        api_key = get_current_api_key()
+        client = GW2API(api_key=api_key)
         characters = client.get_characters()
         return jsonify({
             'status': 'success',
             'data': characters
         })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 401
     except Exception as e:
+        logger.error(f"Error fetching characters: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -817,20 +1073,28 @@ def get_characters():
 
 
 @app.route('/api/character/<name>')
+@require_auth
 def get_character(name):
-    """Get detailed character information."""
+    """Get detailed character information (requires authentication)."""
     try:
-        client = GW2API()
+        api_key = get_current_api_key()
+        client = GW2API(api_key=api_key)
         character = client.get_character(name)
-        
+
         # Add calculated fields
         character['age_hours'] = character['age'] // 3600
-        
+
         return jsonify({
             'status': 'success',
             'data': character
         })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 401
     except Exception as e:
+        logger.error(f"Error fetching character {name}: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -838,16 +1102,18 @@ def get_character(name):
 
 
 @app.route('/api/wallet')
+@require_auth
 def get_wallet():
-    """Get account wallet."""
+    """Get account wallet (requires authentication)."""
     try:
-        client = GW2API()
+        api_key = get_current_api_key()
+        client = GW2API(api_key=api_key)
         wallet = client.get_account_wallet()
         currencies = client.get_currencies()
-        
+
         # Create currency map
         currency_map = {c['id']: c for c in currencies}
-        
+
         # Enrich wallet data
         enriched = []
         for item in wallet:
@@ -859,7 +1125,7 @@ def get_wallet():
                 'description': curr_info.get('description', ''),
                 'icon': curr_info.get('icon', '')
             }
-            
+
             # Format gold specially
             if item['id'] == 1:
                 gold = item['value'] // 10000
@@ -868,14 +1134,20 @@ def get_wallet():
                 enriched_item['formatted'] = f"{gold:,}g {silver}s {copper}c"
             else:
                 enriched_item['formatted'] = f"{item['value']:,}"
-            
+
             enriched.append(enriched_item)
-        
+
         return jsonify({
             'status': 'success',
             'data': enriched
         })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 401
     except Exception as e:
+        logger.error(f"Error fetching wallet: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -883,22 +1155,30 @@ def get_wallet():
 
 
 @app.route('/api/bank')
+@require_auth
 def get_bank():
-    """Get bank contents."""
+    """Get bank contents (requires authentication)."""
     try:
-        client = GW2API()
+        api_key = get_current_api_key()
+        client = GW2API(api_key=api_key)
         bank = client.get_account_bank()
-        
+
         # Filter out empty slots
         items = [item for item in bank if item is not None]
-        
+
         return jsonify({
             'status': 'success',
             'data': items,
             'total_slots': len(bank),
             'filled_slots': len(items)
         })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 401
     except Exception as e:
+        logger.error(f"Error fetching bank: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -906,22 +1186,30 @@ def get_bank():
 
 
 @app.route('/api/materials')
+@require_auth
 def get_materials():
-    """Get material storage."""
+    """Get material storage (requires authentication)."""
     try:
-        client = GW2API()
+        api_key = get_current_api_key()
+        client = GW2API(api_key=api_key)
         materials = client.get_account_materials()
-        
+
         # Filter and sort
         non_zero = [m for m in materials if m.get('count', 0) > 0]
         non_zero.sort(key=lambda x: x['count'], reverse=True)
-        
+
         return jsonify({
             'status': 'success',
             'data': non_zero,
             'total_types': len(non_zero)
         })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 401
     except Exception as e:
+        logger.error(f"Error fetching materials: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -994,15 +1282,17 @@ def get_tp_prices():
 
 
 @app.route('/api/tp/transactions/<transaction_type>')
+@require_auth
 def get_tp_transactions(transaction_type):
     """
-    Get trading post transactions.
+    Get trading post transactions (requires authentication).
 
     Args:
         transaction_type: One of 'current-buys', 'current-sells', 'history-buys', 'history-sells'
     """
     try:
-        client = GW2API()
+        api_key = get_current_api_key()
+        client = GW2API(api_key=api_key)
 
         # Get the appropriate transaction data
         if transaction_type == 'current-buys':
@@ -1058,7 +1348,13 @@ def get_tp_transactions(transaction_type):
             'data': enriched,
             'count': len(enriched)
         })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 401
     except Exception as e:
+        logger.error(f"Error fetching TP transactions: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
