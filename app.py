@@ -1258,6 +1258,37 @@ def get_account():
         }), 400
 
 
+@bp.route('/api/user/world')
+@require_auth
+def get_user_world():
+    """Get user's home world (WvW world affiliation)."""
+    try:
+        api_key = get_current_api_key()
+        client = GW2API(api_key=api_key)
+        account_wvw = client.get_account_wvw()
+
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'world_id': account_wvw.get('world'),
+                'team_id': account_wvw.get('team'),
+                'skiff_id': account_wvw.get('skiff'),
+                'warclaw_id': account_wvw.get('warclaw')
+            }
+        })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 401
+    except Exception as e:
+        logger.error(f"Error fetching user world: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 400
+
+
 @bp.route('/api/characters')
 @require_auth
 def get_characters():

@@ -10,6 +10,11 @@ function apiUrl(path) {
     return prefix + cleanPath;
 }
 
+// Helper function to get user's world ID (falls back to 1020 if not set)
+function getUserWorldId() {
+    return window.GW2Data && window.GW2Data.userWorldId ? window.GW2Data.userWorldId : 1020;
+}
+
 // ============= AUTHENTICATION FUNCTIONS =============
 
 // Check if user is logged in on page load
@@ -27,6 +32,8 @@ function checkAuthStatus() {
         hideAuthModal();
         showMainContent();
         updateUserBadge();
+        // Load user's home world for authenticated sessions
+        window.GW2Data.getUserWorld();
     } else {
         // User is not logged in
         showAuthModal();
@@ -111,6 +118,9 @@ async function handleLogin() {
             hideAuthModal();
             showMainContent();
             updateUserBadge();
+
+            // Load user's home world
+            await window.GW2Data.getUserWorld();
 
             // Check if user has API key and redirect to settings if not
             await checkAndRedirectIfNoApiKey();
@@ -265,7 +275,31 @@ window.GW2Data = {
     objectivesMetadata: null,
     mapsMeta: {}, // key: mapId -> { map_rect, continent_rect }
     loadingMatch: null, // Promise to prevent concurrent loads
-    
+    userWorldId: null, // User's home world ID
+
+    async getUserWorld() {
+        try {
+            const response = await fetch(apiUrl('/api/user/world'), {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                }
+            });
+            const data = await response.json();
+
+            if (data.status === 'success' && data.data.world_id) {
+                this.userWorldId = data.data.world_id;
+                console.log(`User world loaded: ${this.userWorldId}`);
+                return this.userWorldId;
+            } else {
+                console.warn('Failed to load user world:', data.message);
+                return null;
+            }
+        } catch (error) {
+            console.error('Error loading user world:', error);
+            return null;
+        }
+    },
+
     async getMatchData(worldId = 1020, forceRefresh = false) {
         const now = Date.now();
         const cacheAge = this.matchDataTimestamp ? now - this.matchDataTimestamp : Infinity;
@@ -366,7 +400,8 @@ let skirmishTimerInterval = null;
 
 async function updateEnhancedWvWStats() {
     try {
-        const response = await fetch(apiUrl('/api/wvw/stats/1020'));
+        const worldId = getUserWorldId();
+        const response = await fetch(apiUrl(`/api/wvw/stats/${worldId}`));
         const data = await response.json();
 
         if (data.status === 'success') {
@@ -563,18 +598,19 @@ async function updateDashboardStats() {
         
         // Get WvW match data from cache (with fast fail)
         try {
+            const worldId = getUserWorldId();
             const match = await Promise.race([
-                window.GW2Data.getMatchData(1020),
+                window.GW2Data.getMatchData(worldId),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Dashboard timeout')), 5000))
             ]);
-            
+
             if (match) {
-                
+
                 // Find which team the player is on
                 let myTeam = null;
                 let myColor = null;
                 for (const color of ['red', 'green', 'blue']) {
-                    if (match.worlds[color].all_world_ids && match.worlds[color].all_world_ids.includes(1020)) {
+                    if (match.worlds[color].all_world_ids && match.worlds[color].all_world_ids.includes(worldId)) {
                         myTeam = match.worlds[color];
                         myColor = color;
                         break;
@@ -875,7 +911,8 @@ let activityTimeWindow = '6h';  // Default time window
 
 async function updateActivityTimeline() {
     try {
-        const response = await fetch(apiUrl(`/api/wvw/activity/1020?window=${activityTimeWindow}`));
+        const worldId = getUserWorldId();
+        const response = await fetch(apiUrl(`/api/wvw/activity/${worldId}?window=${activityTimeWindow}`));
         const data = await response.json();
         
         if (data.status === 'success' && data.timeline) {
@@ -1261,7 +1298,8 @@ let kdrTimeWindow = '6h';  // Default time window
 
 async function updateKDRTimeline() {
     try {
-        const response = await fetch(apiUrl(`/api/wvw/kdr/1020?window=${kdrTimeWindow}`));
+        const worldId = getUserWorldId();
+        const response = await fetch(apiUrl(`/api/wvw/kdr/${worldId}?window=${kdrTimeWindow}`));
         const data = await response.json();
         
         if (data.status === 'success' && data.timeline) {
@@ -1675,7 +1713,8 @@ let pptTimeWindow = '6h';  // Default time window
 
 async function updatePPTTimeline() {
     try {
-        const response = await fetch(apiUrl(`/api/wvw/ppt/1020?window=${pptTimeWindow}`));
+        const worldId = getUserWorldId();
+        const response = await fetch(apiUrl(`/api/wvw/ppt/${worldId}?window=${pptTimeWindow}`));
         const data = await response.json();
 
         if (data.status === 'success' && data.timeline) {
@@ -2237,7 +2276,8 @@ async function reloadMatchData() {
     
     try {
         // Force refresh the match data
-        const match = await window.GW2Data.getMatchData(1020, true);
+        const worldId = getUserWorldId();
+        const match = await window.GW2Data.getMatchData(worldId, true);
         
         const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
         
@@ -3122,15 +3162,16 @@ async function loadMyWorldMatch() {
     
     try {
         // Use cached match data with timeout
-        const match = await window.GW2Data.getMatchData(1020);
-        
+        const worldId = getUserWorldId();
+        const match = await window.GW2Data.getMatchData(worldId);
+
         const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
         console.log(`[UI] Match loaded and rendered in ${elapsed}s`);
-        
+
         if (match) {
-            let html = `<h3>WvW Match for Your World (1020)</h3>`;
+            let html = `<h3>WvW Match for Your World (${worldId})</h3>`;
             html += `<p style="color: #888; font-size: 0.9em;">Loaded in ${elapsed}s</p>`;
-            html += renderMatchDetail(match, null, 1020);
+            html += renderMatchDetail(match, null, worldId);
             resultDiv.innerHTML = html;
         } else {
             resultDiv.innerHTML = `<div class="status-message status-error">Error: Could not load match data</div>`;
@@ -4165,7 +4206,8 @@ async function initWarRoomMaps() {
         warroomObjectivesData = await window.GW2Data.getObjectivesMetadata();
 
         console.log('War Room: Loading match data...');
-        warroomMatchData = await window.GW2Data.getMatchData(1020);
+        const worldId = getUserWorldId();
+        warroomMatchData = await window.GW2Data.getMatchData(worldId);
 
         // Organize objectives by map
         if (warroomMatchData) {
@@ -4623,7 +4665,8 @@ async function refreshCaptureEvents() {
     try {
         feedContainer.innerHTML = '<p style="text-align: center; padding: 20px;"><span class="loading"></span> Loading capture events...</p>';
 
-        const response = await fetch(apiUrl(`/api/wvw/activity/1020`));
+        const worldId = getUserWorldId();
+        const response = await fetch(apiUrl(`/api/wvw/activity/${worldId}`));
         const data = await response.json();
 
         if (data.status !== 'success') {
@@ -4720,7 +4763,8 @@ function startWarRoomAutoRefresh(intervalSeconds = 30) {
 
     warroomAutoRefreshInterval = setInterval(async () => {
         try {
-            warroomMatchData = await window.GW2Data.getMatchData(1020, true);
+            const worldId = getUserWorldId();
+            warroomMatchData = await window.GW2Data.getMatchData(worldId, true);
 
             if (warroomMatchData) {
                 warroomMapObjectives = {};
