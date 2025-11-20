@@ -150,13 +150,14 @@ def require_auth(f):
     return decorated
 
 
-def create_user(email: str, password: str) -> dict:
+def create_user(email: str, password: str, api_key: str = None) -> dict:
     """
     Create a new user account.
 
     Args:
         email: User email
         password: Plain text password
+        api_key: Optional GW2 API key to store
 
     Returns:
         Dictionary with user_id and token
@@ -193,6 +194,21 @@ def create_user(email: str, password: str) -> dict:
         )
     except Exception as e:
         logger.error(f"Error creating user settings for {user_id}: {e}")
+
+    # Store API key if provided
+    if api_key:
+        try:
+            from crypto_utils import encrypt_api_key
+            encrypted_key = encrypt_api_key(api_key)
+            execute(
+                "INSERT INTO user_api_keys (user_id, api_key_encrypted, api_key_name) VALUES (%s, %s, %s)",
+                (user_id, encrypted_key, 'Default Key')
+            )
+            logger.info(f"API key stored for user {user_id}")
+        except Exception as e:
+            logger.error(f"Error storing API key for user {user_id}: {e}")
+            # Don't fail registration if API key storage fails
+            # The user can add it later in settings
 
     # Generate token
     token = generate_token(user_id)

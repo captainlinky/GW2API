@@ -739,6 +739,7 @@ def register():
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
+        api_key = data.get('api_key', '').strip()
 
         if not email or not password:
             return jsonify({'status': 'error', 'message': 'Email and password required'}), 400
@@ -746,14 +747,27 @@ def register():
         if len(password) < 8:
             return jsonify({'status': 'error', 'message': 'Password must be at least 8 characters'}), 400
 
-        result = create_user(email, password)
+        if not api_key:
+            return jsonify({'status': 'error', 'message': 'API key is required'}), 400
+
+        # Validate API key by testing it against GW2 API
+        try:
+            client = GW2API(api_key)
+            account = client.get_account()
+            account_name = account.get('name')
+        except Exception as e:
+            logger.warning(f"Invalid API key during registration: {e}")
+            return jsonify({'status': 'error', 'message': f'Invalid API key: {str(e)}'}), 400
+
+        result = create_user(email, password, api_key)
 
         return jsonify({
             'status': 'success',
             'data': {
                 'token': result['token'],
                 'user_id': result['user_id'],
-                'email': result['email']
+                'email': result['email'],
+                'account_name': account_name
             }
         })
 

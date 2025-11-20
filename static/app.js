@@ -124,13 +124,14 @@ async function handleRegister() {
     const email = document.getElementById('register-email').value;
     const password = document.getElementById('register-password').value;
     const confirm = document.getElementById('register-confirm').value;
+    const apiKey = document.getElementById('register-api-key').value;
     const errorDiv = document.getElementById('register-error');
 
     errorDiv.classList.remove('show');
     errorDiv.textContent = '';
 
     // Validation
-    if (!email || !password || !confirm) {
+    if (!email || !password || !confirm || !apiKey) {
         showError(errorDiv, 'All fields are required');
         return;
     }
@@ -149,7 +150,7 @@ async function handleRegister() {
         const response = await fetch(apiUrl('/api/auth/register'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ email, password, api_key: apiKey })
         });
 
         const data = await response.json();
@@ -163,6 +164,7 @@ async function handleRegister() {
             document.getElementById('register-email').value = '';
             document.getElementById('register-password').value = '';
             document.getElementById('register-confirm').value = '';
+            document.getElementById('register-api-key').value = '';
 
             // Show main content
             hideAuthModal();
