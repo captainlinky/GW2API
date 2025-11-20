@@ -2316,11 +2316,12 @@ async function loadWallet() {
         
         if (data.status === 'success') {
             let html = '<h3>Wallet</h3><table class="data-table"><thead><tr><th>Currency</th><th>Amount</th></tr></thead><tbody>';
-            
+
             data.data.forEach(item => {
-                html += `<tr><td>${item.name}</td><td>${item.formatted}</td></tr>`;
+                const iconHtml = item.icon ? `<img src="${item.icon}" alt="${item.name}" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">` : '';
+                html += `<tr><td>${iconHtml}${item.name}</td><td>${item.formatted}</td></tr>`;
             });
-            
+
             html += '</tbody></table>';
             resultDiv.innerHTML = html;
         } else {
@@ -2668,55 +2669,32 @@ async function searchItems(query) {
     // Debounce the search
     itemSearchTimeout = setTimeout(async () => {
         try {
-            // Build search cache on first search (common tradeable items)
-            if (!itemSearchCache) {
-                resultsDiv.innerHTML = '<div style="padding: 15px;">Loading item database...</div>';
-                resultsDiv.classList.add('active');
+            resultsDiv.innerHTML = '<div style="padding: 15px;">Searching...</div>';
+            resultsDiv.classList.add('active');
 
-                // Fetch commonly traded items (this list can be expanded)
-                const commonItems = [
-                    19721, 24277, 19976, 24295, 24358, 24289, 24300, 24277,
-                    19684, 19685, 19686, 19687, 19688, 19689, 19690, 19691, // T6 materials
-                    24341, 24342, 24343, 24344, 24345, 24346, // Charged items
-                    46731, 46732, 46733, 46734, 46735, 46736, // Obsidian Shards, etc
-                    19721, 19724, 19725, 19726, 19727, 19728, // Essences
-                    12138, 12141, 12142, 12143, 12144, 12145, 12146, 12147, // Cores
-                    24357, 24351, 24350, 24356, 24289, 24300, // Lodestones
-                    19685, 19684, 19686, 19687, // More T6
-                    19976, 19977, 24277, 24295, // Mystic materials
-                    68063, 77482, 76491, 75762 // Legendary materials
-                ];
+            // Call backend search endpoint
+            const response = await fetch(`/api/items/search?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
 
-                const response = await fetch(`/api/items?ids=${commonItems.join(',')}`);
-                const data = await response.json();
+            if (data.status === 'success') {
+                const matches = data.data;
 
-                if (data.status === 'success') {
-                    itemSearchCache = data.data;
+                if (matches.length === 0) {
+                    resultsDiv.innerHTML = '<div style="padding: 15px; opacity: 0.6;">No matches found.</div>';
                 } else {
-                    resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;">Error loading items</div>';
-                    return;
+                    let html = '';
+                    matches.forEach(item => {
+                        html += `
+                            <div class="search-result-item" onclick="selectItem(${item.id}, '${item.name.replace(/'/g, "\\'")}')">
+                                ${item.icon ? `<img src="${item.icon}" alt="${item.name}">` : ''}
+                                <div>${item.name}</div>
+                            </div>
+                        `;
+                    });
+                    resultsDiv.innerHTML = html;
                 }
-            }
-
-            // Filter items by query
-            const lowerQuery = query.toLowerCase();
-            const matches = itemSearchCache.filter(item =>
-                item.name.toLowerCase().includes(lowerQuery)
-            ).slice(0, 10); // Limit to 10 results
-
-            if (matches.length === 0) {
-                resultsDiv.innerHTML = '<div style="padding: 15px; opacity: 0.6;">No matches found. Try searching for common items like "ecto" or "mystic".</div>';
             } else {
-                let html = '';
-                matches.forEach(item => {
-                    html += `
-                        <div class="search-result-item" onclick="selectItem(${item.id}, '${item.name.replace(/'/g, "\\'")}')">
-                            ${item.icon ? `<img src="${item.icon}" alt="${item.name}">` : ''}
-                            <div>${item.name}</div>
-                        </div>
-                    `;
-                });
-                resultsDiv.innerHTML = html;
+                resultsDiv.innerHTML = '<div style="padding: 15px; color: #f44336;">Error: ' + data.message + '</div>';
             }
 
             resultsDiv.classList.add('active');
@@ -3709,13 +3687,13 @@ async function searchAllInventories() {
         // Collect all items from all characters
         const allItems = [];
 
-        for (const charName of charsData.characters) {
+        for (const charName of charsData.data) {
             const encodedName = encodeURIComponent(charName);
             const charResponse = await fetch('/api/character/' + encodedName);
             const charData = await charResponse.json();
 
-            if (charData.status === 'success' && charData.character && charData.character.bags) {
-                charData.character.bags.forEach((bag, bagIndex) => {
+            if (charData.status === 'success' && charData.data && charData.data.bags) {
+                charData.data.bags.forEach((bag, bagIndex) => {
                     if (bag && bag.inventory) {
                         bag.inventory.forEach((slot, slotIndex) => {
                             if (slot && slot.id) {
@@ -3735,8 +3713,8 @@ async function searchAllInventories() {
         const bankResponse = await fetch('/api/bank');
         const bankData = await bankResponse.json();
 
-        if (bankData.status === 'success' && bankData.bank) {
-            bankData.bank.forEach((slot, slotIndex) => {
+        if (bankData.status === 'success' && bankData.data) {
+            bankData.data.forEach((slot, slotIndex) => {
                 if (slot && slot.id) {
                     allItems.push({
                         id: slot.id,
@@ -3754,16 +3732,27 @@ async function searchAllInventories() {
 
         // Get unique item IDs
         const uniqueIds = [...new Set(allItems.map(i => i.id))];
-        const itemIds = uniqueIds.join(',');
 
-        // Fetch item details
-        const itemsResponse = await fetch('/api/items?ids=' + itemIds);
-        const itemsData = await itemsResponse.json();
-
-        if (itemsData.status !== 'success') {
-            displayDiv.innerHTML = '<p>Error loading item data</p>';
-            return;
+        // Batch requests to avoid URL length limits (max ~200 IDs per request)
+        const batchSize = 200;
+        const itemBatches = [];
+        for (let i = 0; i < uniqueIds.length; i += batchSize) {
+            itemBatches.push(uniqueIds.slice(i, i + batchSize));
         }
+
+        console.log(`Fetching item data in ${itemBatches.length} batches for search`);
+
+        // Fetch all batches in parallel
+        const itemsPromises = itemBatches.map(batch =>
+            fetch('/api/items?ids=' + batch.join(',')).then(r => r.json())
+        );
+
+        const itemsResults = await Promise.all(itemsPromises);
+
+        // Combine results from all batches
+        const allItemsData = itemsResults.flatMap(result => result.status === 'success' ? result.data : []);
+
+        const itemsData = { status: 'success', data: allItemsData };
 
         // Filter items by search query
         const matchingItems = allItems.filter(item => {
