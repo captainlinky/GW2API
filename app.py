@@ -681,11 +681,6 @@ def validate_world_id(world_id):
         return False, "World ID must be a valid integer", None
 
 
-def get_current_api_key():
-    """Get the current API key from environment."""
-    return os.getenv('GW2_API_KEY', '')
-
-
 def save_api_key(api_key):
     """Save API key to database for authenticated users, or .env file for single-user mode."""
     # Check if this is an authenticated request
@@ -894,21 +889,26 @@ def check_user_has_api_key():
 def add_user_api_key():
     """Add or update user's GW2 API key."""
     try:
-        from auth import require_auth
+        from auth import decode_token
         from crypto_utils import encrypt_api_key
         from database import query_one, execute
 
-        # Check authentication manually first
+        # Check authentication - extract and validate JWT token
         token = request.headers.get('Authorization')
         if not token:
             return jsonify({'status': 'error', 'message': 'No authentication token provided'}), 401
 
-        # For now, extract user_id from request if multi-tenant is enabled
-        # In production, you'd use @require_auth decorator
-        user_id = getattr(request, 'user_id', None)
-        if not user_id:
-            # Fallback: support single-user mode
-            user_id = 1  # Default single user
+        # Extract user_id from JWT token
+        if token.startswith('Bearer '):
+            token = token[7:]
+
+        try:
+            payload = decode_token(token)
+            user_id = payload.get('user_id')
+            if not user_id:
+                return jsonify({'status': 'error', 'message': 'Invalid token: missing user_id'}), 401
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': f'Invalid token: {str(e)}'}), 401
 
         data = request.get_json()
         api_key = data.get('api_key')
