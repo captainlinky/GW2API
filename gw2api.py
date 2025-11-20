@@ -52,13 +52,13 @@ _api_cache = SimpleCache(ttl_seconds=300)  # 5 minute cache
 
 class GW2API:
     """Main client for interacting with the Guild Wars 2 API."""
-    
+
     BASE_URL = "https://api.guildwars2.com/v2"
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """
         Initialize the GW2 API client.
-        
+
         Args:
             api_key: Your GW2 API key. If not provided, will try to load from .env file.
         """
@@ -66,6 +66,14 @@ class GW2API:
         self.session = requests.Session()
         if self.api_key:
             self.session.headers.update({'Authorization': f'Bearer {self.api_key}'})
+
+        # Create a hash of the API key for cache key isolation
+        # This ensures different API keys don't share cached data
+        if self.api_key:
+            import hashlib
+            self.api_key_hash = hashlib.md5(self.api_key.encode()).hexdigest()[:8]
+        else:
+            self.api_key_hash = "anonymous"
     
     def _request(self, endpoint: str, params: Optional[Dict] = None, use_cache: bool = True, timeout: int = 15, retries: int = 2) -> Union[Dict, List]:
         """
@@ -84,8 +92,8 @@ class GW2API:
         Raises:
             requests.exceptions.RequestException: If the request fails after retries
         """
-        # Build cache key
-        cache_key = f"{endpoint}:{json.dumps(params, sort_keys=True) if params else ''}"
+        # Build cache key with API key hash to isolate data between users
+        cache_key = f"{self.api_key_hash}:{endpoint}:{json.dumps(params, sort_keys=True) if params else ''}"
 
         # Check cache first
         if use_cache:
@@ -302,14 +310,14 @@ class GW2API:
     def get_guild(self, guild_id: str, public_only: bool = False, timeout: int = 3) -> Dict:
         """
         Get guild information by ID.
-        
+
         Args:
             guild_id: The guild's UUID
             public_only: If True, fetch without auth to get public info only (name, tag, emblem)
             timeout: Request timeout in seconds (shorter for guilds to fail fast)
         """
         # Check cache first
-        cache_key = f"guild:{guild_id}"
+        cache_key = f"{self.api_key_hash}:guild:{guild_id}"
         cached = _api_cache.get(cache_key)
         if cached is not None:
             return cached

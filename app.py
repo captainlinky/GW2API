@@ -696,6 +696,7 @@ def save_api_key(api_key):
         try:
             from crypto_utils import encrypt_api_key
             from database import query_one, execute
+            from gw2api import _api_cache
 
             encrypted_key = encrypt_api_key(api_key)
 
@@ -718,7 +719,9 @@ def save_api_key(api_key):
                     (user_id, encrypted_key, 'Default Key')
                 )
 
-            logger.info(f"API key saved to database for user {user_id}")
+            # Clear the global cache to ensure new API key data is fetched
+            _api_cache.clear()
+            logger.info(f"API key saved to database for user {user_id}, cache cleared")
         except Exception as e:
             logger.error(f"Error saving API key to database: {e}")
             raise
@@ -730,7 +733,9 @@ def save_api_key(api_key):
 
         set_key(env_file, 'GW2_API_KEY', api_key)
         os.environ['GW2_API_KEY'] = api_key
-        logger.info("API key saved to .env file")
+        from gw2api import _api_cache
+        _api_cache.clear()
+        logger.info("API key saved to .env file, cache cleared")
 
 
 def get_polling_config():
