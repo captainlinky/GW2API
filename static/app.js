@@ -3942,7 +3942,7 @@ async function searchAllInventories() {
 
     try {
         // Get all characters
-        const charsResponse = await fetch(apiUrl('/api/characters'));
+        const charsResponse = await authenticatedFetch(apiUrl('/api/characters'));
         const charsData = await charsResponse.json();
 
         if (charsData.status !== 'success') {
@@ -3955,7 +3955,7 @@ async function searchAllInventories() {
 
         for (const charName of charsData.data) {
             const encodedName = encodeURIComponent(charName);
-            const charResponse = await fetch(apiUrl('/api/character/' + encodedName));
+            const charResponse = await authenticatedFetch(apiUrl('/api/character/' + encodedName));
             const charData = await charResponse.json();
 
             if (charData.status === 'success' && charData.data && charData.data.bags) {
@@ -3976,7 +3976,7 @@ async function searchAllInventories() {
         }
 
         // Get bank items
-        const bankResponse = await fetch(apiUrl('/api/bank'));
+        const bankResponse = await authenticatedFetch(apiUrl('/api/bank'));
         const bankData = await bankResponse.json();
 
         if (bankData.status === 'success' && bankData.data) {
@@ -4010,7 +4010,7 @@ async function searchAllInventories() {
 
         // Fetch all batches in parallel
         const itemsPromises = itemBatches.map(batch =>
-            fetch(apiUrl('/api/items?ids=' + batch.join(','))).then(r => r.json())
+            authenticatedFetch(apiUrl('/api/items?ids=' + batch.join(','))).then(r => r.json())
         );
 
         const itemsResults = await Promise.all(itemsPromises);
