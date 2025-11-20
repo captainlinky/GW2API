@@ -67,54 +67,64 @@ class GW2API:
         if self.api_key:
             self.session.headers.update({'Authorization': f'Bearer {self.api_key}'})
     
-    def _request(self, endpoint: str, params: Optional[Dict] = None, use_cache: bool = True, timeout: int = 5) -> Union[Dict, List]:
+    def _request(self, endpoint: str, params: Optional[Dict] = None, use_cache: bool = True, timeout: int = 15, retries: int = 2) -> Union[Dict, List]:
         """
-        Make a request to the GW2 API.
-        
+        Make a request to the GW2 API with retry logic.
+
         Args:
             endpoint: API endpoint (e.g., 'account', 'characters')
             params: Optional query parameters
             use_cache: Whether to use cached response if available
-            timeout: Request timeout in seconds
-            
+            timeout: Request timeout in seconds (default 15)
+            retries: Number of retries on timeout (default 2)
+
         Returns:
             JSON response from the API
-            
+
         Raises:
-            requests.exceptions.RequestException: If the request fails
+            requests.exceptions.RequestException: If the request fails after retries
         """
         # Build cache key
         cache_key = f"{endpoint}:{json.dumps(params, sort_keys=True) if params else ''}"
-        
+
         # Check cache first
         if use_cache:
             cached = _api_cache.get(cache_key)
             if cached is not None:
                 return cached
-        
-        # Make request with timeout
+
+        # Make request with retry logic
         url = f"{self.BASE_URL}/{endpoint}"
-        start = time.time()
-        try:
-            response = self.session.get(url, params=params, timeout=timeout)
-            elapsed = time.time() - start
-            logger.debug(f"{endpoint} took {elapsed:.2f}s")
-            response.raise_for_status()
-            data = response.json()
+        last_error = None
 
-            # Cache successful responses
-            if use_cache:
-                _api_cache.set(cache_key, data)
+        for attempt in range(retries + 1):
+            start = time.time()
+            try:
+                response = self.session.get(url, params=params, timeout=timeout)
+                elapsed = time.time() - start
+                logger.debug(f"{endpoint} took {elapsed:.2f}s")
+                response.raise_for_status()
+                data = response.json()
 
-            return data
-        except requests.Timeout:
-            elapsed = time.time() - start
-            logger.warning(f"{endpoint} TIMEOUT after {elapsed:.2f}s")
-            raise
-        except Exception as e:
-            elapsed = time.time() - start
-            logger.error(f"{endpoint} ERROR after {elapsed:.2f}s: {e}")
-            raise
+                # Cache successful responses
+                if use_cache:
+                    _api_cache.set(cache_key, data)
+
+                return data
+            except requests.Timeout:
+                elapsed = time.time() - start
+                last_error = f"TIMEOUT after {elapsed:.2f}s"
+                if attempt < retries:
+                    wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                    logger.warning(f"{endpoint} {last_error}, retry {attempt + 1}/{retries} in {wait_time}s")
+                    time.sleep(wait_time)
+                else:
+                    logger.warning(f"{endpoint} {last_error} (failed after {retries + 1} attempts)")
+                    raise
+            except Exception as e:
+                elapsed = time.time() - start
+                logger.error(f"{endpoint} ERROR after {elapsed:.2f}s: {e}")
+                raise
     
     # Account Endpoints
     def get_account(self) -> Dict:
@@ -231,12 +241,12 @@ class GW2API:
     def get_tp_prices(self, item_ids: Optional[List[int]] = None) -> Union[List[Dict], Dict]:
         """Get Trading Post prices."""
         if item_ids:
-            return self._request('commerce/prices', params={'ids': ','.join(map(str, item_ids))})
-        return self._request('commerce/prices')
+            return self._request('commerce/prices', params={'ids': ','.join(map(str, item_ids))}, timeout=20, retries=3)
+        return self._request('commerce/prices', timeout=20, retries=3)
     
     def get_tp_listings(self, item_ids: List[int]) -> List[Dict]:
         """Get Trading Post listings (buy/sell orders)."""
-        return self._request('commerce/listings', params={'ids': ','.join(map(str, item_ids))})
+        return self._request('commerce/listings', params={'ids': ','.join(map(str, item_ids))}, timeout=20, retries=3)
 
     def get_tp_transactions_current_buys(self) -> List[Dict]:
         """Get current buy orders on Trading Post."""
