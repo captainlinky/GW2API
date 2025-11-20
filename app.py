@@ -1017,6 +1017,20 @@ def serve_manifest():
 @bp.route('/api/status')
 def api_status():
     """Check API status and key validity."""
+    # Verify authentication for authenticated users
+    token = request.headers.get('Authorization')
+    if token:
+        try:
+            if token.startswith('Bearer '):
+                token = token[7:]
+
+            from auth import decode_token
+            payload = decode_token(token)
+            request.user_id = payload['user_id']
+        except Exception as e:
+            logger.warning(f"Invalid token in /api/status: {e}")
+            # Continue without authentication for backwards compatibility
+
     api_key = get_current_api_key()
     
     if not api_key:

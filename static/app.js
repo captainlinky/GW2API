@@ -2329,12 +2329,21 @@ function switchTab(tabName) {
         tab.classList.remove('active');
     });
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-    
+
     // Update tab content
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
     });
     document.getElementById(tabName).classList.add('active');
+
+    // Update user email in settings tab
+    if (tabName === 'settings') {
+        const email = localStorage.getItem('user_email');
+        const emailElement = document.getElementById('current-user-email');
+        if (emailElement && email) {
+            emailElement.innerHTML = `<strong>Logged in as:</strong> ${email}`;
+        }
+    }
 }
 
 // API Status Check
@@ -2345,7 +2354,7 @@ async function checkAndRedirectIfNoApiKey() {
 
         if (data.status === 'success' && !data.has_api_key) {
             // User has no API key - redirect to settings tab
-            showTab('settings');
+            switchTab('settings');
 
             // Show a prominent message
             const statusDiv = document.getElementById('current-key-status');
@@ -2370,7 +2379,7 @@ async function checkAndRedirectIfNoApiKey() {
 
 async function checkApiStatus() {
     try {
-        const response = await fetch(apiUrl('/api/status'));
+        const response = await authenticatedFetch(apiUrl('/api/status'));
         const data = await response.json();
 
         const badge = document.getElementById('account-badge');
@@ -2431,23 +2440,23 @@ async function updateKeyStatus() {
 
 async function saveApiKey() {
     const apiKey = document.getElementById('new-api-key').value.trim();
-    
+
     if (!apiKey) {
         showMessage('settings', 'Please enter an API key', 'error');
         return;
     }
-    
+
     try {
-        const response = await fetch(apiUrl('/api/key'), {
+        const response = await authenticatedFetch(apiUrl('/api/key'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ api_key: apiKey })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.status === 'success') {
             showMessage('settings', `API key saved successfully! Account: ${data.account_name}. Reloading...`, 'success');
             document.getElementById('new-api-key').value = '';
@@ -2470,7 +2479,7 @@ async function deleteApiKey() {
     }
 
     try {
-        const response = await fetch(apiUrl('/api/key'), {
+        const response = await authenticatedFetch(apiUrl('/api/key'), {
             method: 'DELETE'
         });
 
