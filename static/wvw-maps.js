@@ -198,20 +198,20 @@ async function renderMap(mapType) {
     // Local background images (downloaded once) for faster loads, prefer WebP when supported
     const bgUrls = {
         'Center': {
-            low: SUPPORTS_WEBP ? '/gw2api/static/maps/eb_512.webp' : '/gw2api/static/maps/eb_512.jpg',
-            high: SUPPORTS_WEBP ? '/gw2api/static/maps/eb_2048.webp' : '/gw2api/static/maps/eb_2048.jpg'
+            low: SUPPORTS_WEBP ? (window.APP_PREFIX || '') + '/static/maps/eb_512.webp' : (window.APP_PREFIX || '') + '/static/maps/eb_512.jpg',
+            high: SUPPORTS_WEBP ? (window.APP_PREFIX || '') + '/static/maps/eb_2048.webp' : (window.APP_PREFIX || '') + '/static/maps/eb_2048.jpg'
         },
         'RedHome': {
-            low: SUPPORTS_WEBP ? '/gw2api/static/maps/red_bl_512.webp' : '/gw2api/static/maps/red_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/gw2api/static/maps/red_bl_2048.webp' : '/gw2api/static/maps/red_bl_2048.jpg'
+            low: SUPPORTS_WEBP ? (window.APP_PREFIX || '') + '/static/maps/red_bl_512.webp' : (window.APP_PREFIX || '') + '/static/maps/red_bl_512.jpg',
+            high: SUPPORTS_WEBP ? (window.APP_PREFIX || '') + '/static/maps/red_bl_2048.webp' : (window.APP_PREFIX || '') + '/static/maps/red_bl_2048.jpg'
         },
         'BlueHome': {
-            low: SUPPORTS_WEBP ? '/gw2api/static/maps/blue_bl_512.webp' : '/gw2api/static/maps/blue_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/gw2api/static/maps/blue_bl_2048.webp' : '/gw2api/static/maps/blue_bl_2048.jpg'
+            low: SUPPORTS_WEBP ? (window.APP_PREFIX || '') + '/static/maps/blue_bl_512.webp' : (window.APP_PREFIX || '') + '/static/maps/blue_bl_512.jpg',
+            high: SUPPORTS_WEBP ? (window.APP_PREFIX || '') + '/static/maps/blue_bl_2048.webp' : (window.APP_PREFIX || '') + '/static/maps/blue_bl_2048.jpg'
         },
         'GreenHome': {
-            low: SUPPORTS_WEBP ? '/gw2api/static/maps/green_bl_512.webp' : '/gw2api/static/maps/green_bl_512.jpg',
-            high: SUPPORTS_WEBP ? '/gw2api/static/maps/green_bl_2048.webp' : '/gw2api/static/maps/green_bl_2048.jpg'
+            low: SUPPORTS_WEBP ? (window.APP_PREFIX || '') + '/static/maps/green_bl_512.webp' : (window.APP_PREFIX || '') + '/static/maps/green_bl_512.jpg',
+            high: SUPPORTS_WEBP ? (window.APP_PREFIX || '') + '/static/maps/green_bl_2048.webp' : (window.APP_PREFIX || '') + '/static/maps/green_bl_2048.jpg'
         }
     };
     

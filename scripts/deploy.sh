@@ -2,17 +2,35 @@
 
 set -e  # Exit on error
 
+# Auto-detect script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+APP_DIR="$SCRIPT_DIR"
+
 echo "🚀 Starting deployment..."
+echo "📁 Application directory: $APP_DIR"
 
 # Navigate to app directory
-cd /opt/gw2api/app
+cd "$APP_DIR"
 
 # Pull latest changes
 echo "📥 Pulling latest changes from git..."
 git pull origin main
 
+# Detect virtual environment (try .venv first, then venv)
+if [ -d "$APP_DIR/.venv" ]; then
+    VENV_DIR="$APP_DIR/.venv"
+elif [ -d "$APP_DIR/venv" ]; then
+    VENV_DIR="$APP_DIR/venv"
+else
+    echo "❌ Virtual environment not found. Please run:"
+    echo "   python3 -m venv .venv"
+    echo "   .venv/bin/pip install -r requirements.txt"
+    exit 1
+fi
+
 # Activate virtual environment
-source venv/bin/activate
+echo "🐍 Using virtual environment: $VENV_DIR"
+source "$VENV_DIR/bin/activate"
 
 # Install/update dependencies
 echo "📦 Installing dependencies..."

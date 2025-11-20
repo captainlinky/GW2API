@@ -100,9 +100,22 @@ CREATE TABLE IF NOT EXISTS user_settings (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Items table for Trading Post search (shared across all users)
+CREATE TABLE IF NOT EXISTS items (
+    id INTEGER PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    icon TEXT,
+    rarity VARCHAR(50),
+    level INTEGER,
+    type VARCHAR(100),
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
 CREATE INDEX IF NOT EXISTS idx_api_keys_user ON user_api_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_tracked_worlds_user ON user_tracked_worlds(user_id);
 CREATE INDEX IF NOT EXISTS idx_guild_tracking_match ON guild_tracking(match_id);
+CREATE INDEX IF NOT EXISTS idx_items_name ON items(name);
+CREATE INDEX IF NOT EXISTS idx_items_name_lower ON items(LOWER(name));

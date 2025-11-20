@@ -8,16 +8,16 @@
     <title>GW2 WvW Command Center</title>
 
     <!-- Favicons -->
-    <link rel="icon" type="image/svg+xml" href="/gw2api/static/icon.svg">
-    <link rel="icon" type="image/png" sizes="192x192" href="/gw2api/static/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/gw2api/static/icon-512.png">
-    <link rel="apple-touch-icon" href="/gw2api/static/icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="{{ app_prefix }}/static/icon.svg">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ app_prefix }}/static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ app_prefix }}/static/icon-512.png">
+    <link rel="apple-touch-icon" href="{{ app_prefix }}/static/icon-192.png">
 
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/gw2api/static/manifest.json">
+    <link rel="manifest" href="{{ app_prefix }}/static/manifest.json">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/gw2api/static/style.css">
+    <link rel="stylesheet" href="{{ app_prefix }}/static/style.css">
 </head>
 <body>
     <!-- Login/Register Modal -->
@@ -720,7 +720,12 @@
         </main>
     </div>
 
-    <script src="/gw2api/static/app.js?v=2025111903"></script>
-    <script src="/gw2api/static/wvw-maps.js"></script>
+    <!-- Set global app prefix for JavaScript -->
+    <script>
+        window.APP_PREFIX = '{{ app_prefix }}';
+    </script>
+
+    <script src="{{ app_prefix }}/static/app.js?v=2025111903"></script>
+    <script src="{{ app_prefix }}/static/wvw-maps.js"></script>
 </body>
 </html>

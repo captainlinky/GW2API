@@ -25,29 +25,45 @@ A comprehensive web dashboard for Guild Wars 2 with real-time WvW tracking, acco
 
 ## Getting Started
 
-### Prerequisites
-- Python 3.7+
-- PostgreSQL (for multi-tenant support)
-- GW2 API key (free from https://account.arena.net/applications)
+### Quick Start
 
-### Installation
-
-1. Clone the repository
+**Development Mode** (Simple, no database):
 ```bash
-git clone <repository-url>
+git clone https://github.com/captainlinky/GW2API.git
 cd GW2API
+./scripts/deploy-ubuntu.sh  # Auto-installs dependencies
+nano .env  # Add your GW2_API_KEY
+./scripts/startup/start_ui.sh
 ```
+Access at: http://localhost:5555
 
-2. Install dependencies
+**Production Mode** (VPS with domain):
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/captainlinky/GW2API.git
+cd GW2API
+sudo ./scripts/deploy-ubuntu.sh yourdomain.com admin@example.com
+```
+Access at: https://yourdomain.com/gw2api/
+
+### Prerequisites
+- Ubuntu 20.04+ (or any Linux with Python 3.7+)
+- GW2 API key (free from https://account.arena.net/applications)
+- For production: Domain name, sudo access, ~2GB RAM
+
+### Manual Installation
+
+1. Clone and install
+```bash
+git clone https://github.com/captainlinky/GW2API.git
+cd GW2API
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
-3. Configure environment
+2. Configure environment
 ```bash
 cp .env.example .env
-# Edit .env and add:
-# - GW2_API_KEY (from Arena.net)
+# Edit .env and add your GW2_API_KEY
 # - DATABASE_URL (PostgreSQL connection)
 # - JWT_SECRET_KEY and other security keys
 ```
@@ -125,6 +141,22 @@ http://localhost:5555       (local development)
 - **PostgreSQL** - User accounts, API keys, settings
 - **In-Memory Cache** - Real-time match data with 30-second TTL
 - **Background Snapshots** - 7-day historical data with 15-minute intervals
+
+## Repository Structure
+
+```
+GW2API/
+├── Core Application      # app.py, auth.py, cli.py, gw2api.py, wvw_tracker.py
+├── config/               # Server configuration templates
+├── docs/                 # Documentation and guides
+├── scripts/              # Deployment and utility scripts
+│   ├── startup/          # Server startup scripts
+│   └── tools/            # Development utilities
+├── static/               # Frontend assets (CSS, JS, images)
+└── templates/            # HTML templates
+```
+
+See [STRUCTURE.md](STRUCTURE.md) for detailed repository organization.
 
 ## API Documentation
 

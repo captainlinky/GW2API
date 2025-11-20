@@ -11,7 +11,7 @@ import time
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, Blueprint
 from flask_cors import CORS
 from gw2api import GW2API, GW2Viewer
 from wvw_tracker import WvWTracker
@@ -28,9 +28,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger('GW2-WebUI')
 
-app = Flask(__name__)
+# Get APP_PREFIX for path-based routing (used in production with nginx)
+APP_PREFIX = os.environ.get('APP_PREFIX', '').rstrip('/')
+if APP_PREFIX:
+    logger.info(f"Application running with prefix: {APP_PREFIX}")
+
+# Create Flask app
+app = Flask(__name__, static_url_path=APP_PREFIX + '/static' if APP_PREFIX else '/static')
 app.secret_key = os.urandom(24)
 CORS(app)
+
+# Create blueprint for routes when using APP_PREFIX
+if APP_PREFIX:
+    bp = Blueprint('main', __name__, url_prefix=APP_PREFIX)
+    logger.info(f"Using Blueprint with url_prefix: {APP_PREFIX}")
+else:
+    # Use app directly when no prefix
+    bp = app
 
 # Initialize WvW tracker
 wvw_tracker = WvWTracker()
@@ -149,7 +163,7 @@ def require_auth(f):
     user_id into request context for use in route handlers.
 
     Usage:
-        @app.route('/api/protected')
+        @bp.route('/api/protected')
         @require_auth
         def protected_route():
             user_id = request.user_id  # Available after decorator
@@ -716,7 +730,7 @@ def format_response(data, format_type='json'):
 
 # ============= AUTHENTICATION ROUTES (Multi-Tenant) =============
 
-@app.route('/api/auth/register', methods=['POST'])
+@bp.route('/api/auth/register', methods=['POST'])
 def register():
     """Register a new user account."""
     try:
@@ -750,7 +764,7 @@ def register():
         return jsonify({'status': 'error', 'message': 'Registration failed'}), 500
 
 
-@app.route('/api/auth/login', methods=['POST'])
+@bp.route('/api/auth/login', methods=['POST'])
 def login():
     """Authenticate user and return JWT token."""
     try:
@@ -781,7 +795,7 @@ def login():
         return jsonify({'status': 'error', 'message': 'Login failed'}), 500
 
 
-@app.route('/api/user/api-key', methods=['POST'])
+@bp.route('/api/user/api-key', methods=['POST'])
 def add_user_api_key():
     """Add or update user's GW2 API key."""
     try:
@@ -859,13 +873,58 @@ def add_user_api_key():
 # ============= END AUTHENTICATION ROUTES =============
 
 
-@app.route('/')
+@bp.route('/')
 def index():
     """Main dashboard."""
-    return render_template('index.html')
+    return render_template('index.html', app_prefix=APP_PREFIX)
 
 
-@app.route('/api/status')
+@bp.route('/static/manifest.json')
+def serve_manifest():
+    """Serve manifest.json with dynamic paths based on APP_PREFIX."""
+    manifest = {
+        "name": "GW2 WvW Command Center",
+        "short_name": "GW2 WvW",
+        "description": "Guild Wars 2 World vs World Dashboard and Analytics",
+        "start_url": f"{APP_PREFIX}/" if APP_PREFIX else "/",
+        "display": "standalone",
+        "background_color": "#1a1a1a",
+        "theme_color": "#d4af37",
+        "orientation": "any",
+        "icons": [
+            {
+                "src": f"{APP_PREFIX}/static/icon-192.png" if APP_PREFIX else "/static/icon-192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any maskable"
+            },
+            {
+                "src": f"{APP_PREFIX}/static/icon-512.png" if APP_PREFIX else "/static/icon-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any maskable"
+            }
+        ],
+        "categories": ["games", "utilities"],
+        "shortcuts": [
+            {
+                "name": "Dashboard",
+                "short_name": "Dashboard",
+                "description": "View WvW Command Center",
+                "url": f"{APP_PREFIX}/" if APP_PREFIX else "/",
+                "icons": [
+                    {
+                        "src": f"{APP_PREFIX}/static/icon-192.png" if APP_PREFIX else "/static/icon-192.png",
+                        "sizes": "192x192"
+                    }
+                ]
+            }
+        ]
+    }
+    return jsonify(manifest)
+
+
+@bp.route('/api/status')
 def api_status():
     """Check API status and key validity."""
     api_key = get_current_api_key()
@@ -895,7 +954,7 @@ def api_status():
         })
 
 
-@app.route('/api/key', methods=['GET', 'POST', 'DELETE'])
+@bp.route('/api/key', methods=['GET', 'POST', 'DELETE'])
 def api_key_management():
     """Manage API key."""
     if request.method == 'GET':
@@ -963,7 +1022,7 @@ def api_key_management():
             })
 
 
-@app.route('/api/polling-config', methods=['GET', 'POST'])
+@bp.route('/api/polling-config', methods=['GET', 'POST'])
 def polling_config_management():
     """Manage polling configuration."""
     if request.method == 'GET':
@@ -1017,7 +1076,7 @@ def polling_config_management():
         })
 
 
-@app.route('/api/account')
+@bp.route('/api/account')
 @require_auth
 def get_account():
     """Get account information (requires authentication)."""
@@ -1047,7 +1106,7 @@ def get_account():
         }), 400
 
 
-@app.route('/api/characters')
+@bp.route('/api/characters')
 @require_auth
 def get_characters():
     """Get characters list (requires authentication)."""
@@ -1072,7 +1131,7 @@ def get_characters():
         }), 400
 
 
-@app.route('/api/character/<name>')
+@bp.route('/api/character/<name>')
 @require_auth
 def get_character(name):
     """Get detailed character information (requires authentication)."""
@@ -1101,7 +1160,7 @@ def get_character(name):
         }), 400
 
 
-@app.route('/api/wallet')
+@bp.route('/api/wallet')
 @require_auth
 def get_wallet():
     """Get account wallet (requires authentication)."""
@@ -1154,7 +1213,7 @@ def get_wallet():
         }), 400
 
 
-@app.route('/api/bank')
+@bp.route('/api/bank')
 @require_auth
 def get_bank():
     """Get bank contents (requires authentication)."""
@@ -1185,7 +1244,7 @@ def get_bank():
         }), 400
 
 
-@app.route('/api/materials')
+@bp.route('/api/materials')
 @require_auth
 def get_materials():
     """Get material storage (requires authentication)."""
@@ -1216,7 +1275,7 @@ def get_materials():
         }), 400
 
 
-@app.route('/api/tp/prices')
+@bp.route('/api/tp/prices')
 def get_tp_prices():
     """Get trading post prices."""
     item_ids = request.args.get('ids', '')
@@ -1281,7 +1340,7 @@ def get_tp_prices():
         }), 400
 
 
-@app.route('/api/tp/transactions/<transaction_type>')
+@bp.route('/api/tp/transactions/<transaction_type>')
 @require_auth
 def get_tp_transactions(transaction_type):
     """
@@ -1361,7 +1420,7 @@ def get_tp_transactions(transaction_type):
         }), 400
 
 
-@app.route('/api/tp/economics/<int:item_id>')
+@bp.route('/api/tp/economics/<int:item_id>')
 def get_tp_economics(item_id):
     """
     Get economic analysis for a Trading Post item.
@@ -1572,7 +1631,7 @@ def calculate_tp_recommendation(spread_percent, supply_demand_ratio, velocity, b
     }
 
 
-@app.route('/api/items')
+@bp.route('/api/items')
 def get_items():
     """Get item information."""
     item_ids = request.args.get('ids', '')
@@ -1666,7 +1725,7 @@ def preload_item_search_cache():
     except Exception as e:
         logger.error(f"[SEARCH] Failed to populate items database: {e}", exc_info=True)
 
-@app.route('/api/items/search')
+@bp.route('/api/items/search')
 def search_items():
     """Search for items by name from PostgreSQL database."""
     from database import get_db_connection
@@ -1738,7 +1797,7 @@ def search_items():
         }), 500
 
 
-@app.route('/api/proxy/maps/<int:map_id>')
+@bp.route('/api/proxy/maps/<int:map_id>')
 def get_map_proxy(map_id):
     """
     Proxy endpoint for GW2 maps API.
@@ -1767,7 +1826,7 @@ def get_map_proxy(map_id):
         }), 500
 
 
-@app.route('/api/query', methods=['POST'])
+@bp.route('/api/query', methods=['POST'])
 def custom_query():
     """Execute a custom API query."""
     data = request.get_json()
@@ -1795,7 +1854,7 @@ def custom_query():
         }), 400
 
 
-@app.route('/api/wvw/matches')
+@bp.route('/api/wvw/matches')
 def get_wvw_matches():
     """Get all current WvW matches with detailed information."""
     try:
@@ -1920,7 +1979,7 @@ def get_wvw_matches():
         }), 400
 
 
-@app.route('/api/wvw/stats/<world_id>')
+@bp.route('/api/wvw/stats/<world_id>')
 def get_wvw_stats(world_id):
     """Get enhanced WvW statistics including PPT, territory control, and skirmish info."""
     is_valid, error_msg, parsed_world_id = validate_world_id(world_id)
@@ -2069,7 +2128,7 @@ def get_wvw_stats(world_id):
         }), 400
 
 
-@app.route('/api/wvw/match/<world_id>')
+@bp.route('/api/wvw/match/<world_id>')
 def get_wvw_match_for_world(world_id):
     """Get WvW match information for a specific world."""
     import time
@@ -2238,7 +2297,7 @@ def get_wvw_match_for_world(world_id):
         }), 400
 
 
-@app.route('/api/wvw/objectives')
+@bp.route('/api/wvw/objectives')
 def get_wvw_objectives_info():
     """Get information about WvW objectives."""
     try:
@@ -2256,7 +2315,7 @@ def get_wvw_objectives_info():
         }), 400
 
 
-@app.route('/api/wvw/tracked-guilds/<match_id>')
+@bp.route('/api/wvw/tracked-guilds/<match_id>')
 def get_tracked_guilds(match_id):
     """Get all tracked guilds for a match, organized by team."""
     try:
@@ -2322,7 +2381,7 @@ def get_tracked_guilds(match_id):
         }), 400
 
 
-@app.route('/api/wvw/active-matches')
+@bp.route('/api/wvw/active-matches')
 def get_active_tracked_matches():
     """Get list of currently tracked matches with current status."""
     try:
@@ -2347,7 +2406,7 @@ def get_active_tracked_matches():
         }), 400
 
 
-@app.route('/api/wvw/activity/<world_id>')
+@bp.route('/api/wvw/activity/<world_id>')
 def get_wvw_activity(world_id):
     """Get WvW activity timeline for a specific world's match."""
     # Validate world ID
@@ -2563,7 +2622,7 @@ def get_wvw_activity(world_id):
         }), 400
 
 
-@app.route('/api/wvw/ppt/<world_id>')
+@bp.route('/api/wvw/ppt/<world_id>')
 def get_wvw_ppt(world_id):
     """Get WvW PPT (Points Per Tick) trends for coverage analysis."""
     # Validate world ID
@@ -2724,7 +2783,7 @@ def get_wvw_ppt(world_id):
         }), 400
 
 
-@app.route('/api/wvw/update-alliance-names', methods=['POST'])
+@bp.route('/api/wvw/update-alliance-names', methods=['POST'])
 def update_alliance_names():
     """Update alliance names from current matchup data."""
     try:
@@ -2779,7 +2838,7 @@ def update_alliance_names():
         }), 400
 
 
-@app.route('/api/wvw/kdr/<world_id>')
+@bp.route('/api/wvw/kdr/<world_id>')
 def get_wvw_kdr(world_id):
     """Get WvW K/D ratio trends for a specific world's match."""
     # Validate world ID
@@ -2958,11 +3017,22 @@ def format_currency(copper):
     return f"{gold:,}g {silver}s {copper_remaining}c"
 
 
+# Register blueprint if using APP_PREFIX
+if APP_PREFIX and isinstance(bp, Blueprint):
+    app.register_blueprint(bp)
+    logger.info(f"Blueprint registered at: {APP_PREFIX}")
+
+
 if __name__ == '__main__':
     print("=" * 60)
     print("  Guild Wars 2 API - Web UI")
     print("=" * 60)
-    print("\n  Starting server at http://localhost:5555")
+    if APP_PREFIX:
+        print(f"\n  Starting server at http://localhost:5555{APP_PREFIX}/")
+        print(f"  Mode: Production (with prefix: {APP_PREFIX})")
+    else:
+        print("\n  Starting server at http://localhost:5555")
+        print("  Mode: Development (no prefix)")
     print("  Press Ctrl+C to stop\n")
     print("=" * 60)
 

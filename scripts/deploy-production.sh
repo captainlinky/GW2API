@@ -5,15 +5,17 @@
 #
 # This script automates the complete production deployment of GW2API on a new
 # server. It handles all infrastructure setup, configuration, and initialization.
+# The script auto-detects its location and works from any directory.
 #
-# Usage: sudo bash deploy-production.sh <domain> <email>
-# Example: sudo bash deploy-production.sh gridserv.io admin@gridserv.io
+# Usage: sudo ./deploy-production.sh <domain> <email>
+# Example: sudo ./deploy-production.sh gridserv.io admin@gridserv.io
 #
 # Requirements:
 # - Ubuntu 20.04+
 # - Root or sudo access
 # - Domain name pointing to this server
 # - ~2GB RAM, 20GB disk space
+# - Run from the GW2API repository directory
 #
 # What This Script Does:
 # 1. Updates system packages
@@ -37,11 +39,14 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Auto-detect script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
 # Configuration
 DOMAIN="${1:?Domain name required. Usage: $0 <domain> <email>}"
 EMAIL="${2:?Email required. Usage: $0 <domain> <email>}"
-APP_DIR="/home/GW2API/GW2API"
-VENV_DIR="${APP_DIR}/venv"
+APP_DIR="$SCRIPT_DIR"
+VENV_DIR="${APP_DIR}/.venv"
 DB_USER="gw2api_user"
 DB_NAME="gw2api"
 DB_PASS=$(openssl rand -base64 32)
@@ -545,12 +550,13 @@ step_verification() {
 step_database_backups() {
     log_step "STEP 12: Setting Up Database Backups"
 
-    mkdir -p /opt/gw2api/backups
-    chmod 755 /opt/gw2api/backups
+    mkdir -p "$APP_DIR/backups"
+    chmod 755 "$APP_DIR/backups"
+    mkdir -p "$APP_DIR/scripts"
 
-    cat > /opt/gw2api/scripts/backup-db.sh <<'EOF'
+    cat > "$APP_DIR/scripts/backup-db.sh" <<EOF
 #!/bin/bash
-BACKUP_DIR="/opt/gw2api/backups"
+BACKUP_DIR="$APP_DIR/backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 FILENAME="gw2api_${DATE}.sql.gz"
 
@@ -562,14 +568,14 @@ pg_dump -U gw2api_user gw2api | gzip > "$BACKUP_DIR/$FILENAME"
 # Keep only last 7 days
 find $BACKUP_DIR -name "gw2api_*.sql.gz" -mtime +7 -delete
 
-echo "Backup created: $FILENAME"
+echo "Backup created: \$FILENAME"
 EOF
 
-    chmod +x /opt/gw2api/scripts/backup-db.sh
+    chmod +x "$APP_DIR/scripts/backup-db.sh"
 
     # Add to crontab
     (crontab -l 2>/dev/null || echo "") | grep -v "backup-db.sh" | \
-        (cat; echo "0 2 * * * /opt/gw2api/scripts/backup-db.sh") | crontab -
+        (cat; echo "0 2 * * * $APP_DIR/scripts/backup-db.sh >> $APP_DIR/logs/backup.log 2>&1") | crontab -
 
     log_success "Database backups configured (daily at 2 AM)"
 }
@@ -581,9 +587,10 @@ EOF
 step_health_monitoring() {
     log_step "STEP 13: Setting Up Health Monitoring"
 
-    mkdir -p /opt/gw2api/scripts
+    mkdir -p "$APP_DIR/scripts"
+    mkdir -p "$APP_DIR/logs"
 
-    cat > /opt/gw2api/scripts/health-check.sh <<'EOF'
+    cat > "$APP_DIR/scripts/health-check.sh" <<'EOF'
 #!/bin/bash
 set +e
 
@@ -634,13 +641,11 @@ else
 fi
 EOF
 
-    chmod +x /opt/gw2api/scripts/health-check.sh
+    chmod +x "$APP_DIR/scripts/health-check.sh"
 
     # Add to crontab
     (crontab -l 2>/dev/null || echo "") | grep -v "health-check.sh" | \
-        (cat; echo "*/5 * * * * /opt/gw2api/scripts/health-check.sh >> /opt/gw2api/logs/health-check.log 2>&1") | crontab -
-
-    mkdir -p /opt/gw2api/logs
+        (cat; echo "*/5 * * * * $APP_DIR/scripts/health-check.sh >> $APP_DIR/logs/health-check.log 2>&1") | crontab -
 
     log_success "Health monitoring configured (every 5 minutes)"
 }
@@ -653,7 +658,7 @@ step_log_rotation() {
     log_step "STEP 14: Setting Up Log Rotation"
 
     cat > /etc/logrotate.d/gw2api <<EOF
-/opt/gw2api/logs/*.log {
+$APP_DIR/logs/*.log {
     daily
     rotate 7
     compress
@@ -699,11 +704,12 @@ ${BLUE}Database Access:${NC}
   Connect: sudo -u postgres psql $DB_NAME
 
 ${BLUE}Important Information:${NC}
+  Application: $APP_DIR
   Configuration: $APP_DIR/.env.production
   Service File: /etc/systemd/system/gw2api.service
   Nginx Config: /etc/nginx/sites-available/$DOMAIN
-  Backups: /opt/gw2api/backups/
-  Logs: /opt/gw2api/logs/
+  Backups: $APP_DIR/backups/
+  Logs: $APP_DIR/logs/
 
 ${YELLOW}Next Steps:${NC}
   1. Update DNS records to point $DOMAIN to this server
@@ -739,6 +745,7 @@ EOF
 
 main() {
     log_info "Starting GW2API Production Deployment"
+    log_info "Application Directory: $APP_DIR"
     log_info "Domain: $DOMAIN"
     log_info "Email: $EMAIL"
     echo ""
