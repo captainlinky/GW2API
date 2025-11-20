@@ -2777,6 +2777,31 @@ async function loadCharacterDetails(name) {
         
         if (data.status === 'success') {
             const char = data.data;
+
+            // Build guild display
+            let guildDisplay = 'None';
+            if (char.guild_info) {
+                const guild = char.guild_info;
+                if (guild.name) {
+                    const tagDisplay = guild.tag ? ` [${guild.tag}]` : '';
+                    guildDisplay = `${guild.name}${tagDisplay}`;
+
+                    // Add emblem logo if available
+                    if (guild.emblem && guild.emblem.background) {
+                        const bgId = guild.emblem.background.id;
+                        const bgUrl = `https://render.guildwars2.com/file/${guild.emblem.background.id}/${guild.emblem.background.file_id}.png`;
+                        guildDisplay = `<div style="display: flex; align-items: center; gap: 10px;">
+                            <img src="${bgUrl}" alt="Guild emblem" style="width: 40px; height: 40px; border-radius: 3px;" onerror="this.style.display='none'">
+                            <span>${guildDisplay}</span>
+                        </div>`;
+                    }
+                } else {
+                    guildDisplay = `${char.guild} (Unknown Guild)`;
+                }
+            } else if (char.guild) {
+                guildDisplay = `${char.guild} (Guild info unavailable)`;
+            }
+
             resultDiv.innerHTML = `
                 <h3>${char.name}</h3>
                 <table class="data-table">
@@ -2786,7 +2811,7 @@ async function loadCharacterDetails(name) {
                     <tr><td><strong>Gender:</strong></td><td>${char.gender}</td></tr>
                     <tr><td><strong>Age:</strong></td><td>${char.age_hours.toLocaleString()} hours</td></tr>
                     <tr><td><strong>Deaths:</strong></td><td>${char.deaths || 0}</td></tr>
-                    <tr><td><strong>Guild:</strong></td><td>${char.guild || 'None'}</td></tr>
+                    <tr><td><strong>Guild:</strong></td><td>${guildDisplay}</td></tr>
                     <tr><td><strong>Created:</strong></td><td>${new Date(char.created).toLocaleDateString()}</td></tr>
                 </table>
             `;

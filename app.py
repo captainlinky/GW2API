@@ -1326,6 +1326,21 @@ def get_character(name):
         # Add calculated fields
         character['age_hours'] = character['age'] // 3600
 
+        # Enrich guild data if character has a guild
+        if character.get('guild'):
+            try:
+                guild_client = GW2API()  # Unauthenticated for public guild info
+                guild_info = guild_client.get_guild(character['guild'], public_only=True)
+                character['guild_info'] = {
+                    'id': guild_info.get('id'),
+                    'name': guild_info.get('name'),
+                    'tag': guild_info.get('tag'),
+                    'emblem': guild_info.get('emblem')
+                }
+            except Exception as e:
+                logger.warning(f"Could not fetch guild info for {character['guild']}: {e}")
+                character['guild_info'] = None
+
         return jsonify({
             'status': 'success',
             'data': character
@@ -1341,6 +1356,36 @@ def get_character(name):
             'status': 'error',
             'message': str(e)
         }), 400
+
+
+@bp.route('/api/guild/<guild_id>')
+def get_guild_info(guild_id):
+    """Get guild information (name, tag, logo) by guild ID."""
+    try:
+        client = GW2API()
+        guild = client.get_guild(guild_id, public_only=True)
+
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'id': guild.get('id'),
+                'name': guild.get('name'),
+                'tag': guild.get('tag'),
+                'emblem': guild.get('emblem')
+            }
+        })
+    except Exception as e:
+        logger.warning(f"Error fetching guild {guild_id}: {e}")
+        # Return null data instead of error to gracefully handle missing guilds
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'id': guild_id,
+                'name': None,
+                'tag': None,
+                'emblem': None
+            }
+        }), 200
 
 
 @bp.route('/api/wallet')
