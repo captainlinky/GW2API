@@ -106,6 +106,9 @@ async function handleLogin() {
         const data = await response.json();
 
         if (data.status === 'success') {
+            // Clear any previous user's cache before logging in new user
+            window.GW2Data.clearCache();
+
             // Store token
             localStorage.setItem('auth_token', data.data.token);
             localStorage.setItem('user_email', data.data.email);
@@ -169,6 +172,9 @@ async function handleRegister() {
         const data = await response.json();
 
         if (data.status === 'success') {
+            // Clear any previous user's cache before registering new user
+            window.GW2Data.clearCache();
+
             // Store token
             localStorage.setItem('auth_token', data.data.token);
             localStorage.setItem('user_email', data.data.email);
@@ -232,9 +238,25 @@ function handleLogout() {
     // Clear all cached data before logout
     window.GW2Data.clearCache();
 
+    // Clear all global polling intervals
+    if (dashboardPollingInterval) {
+        clearInterval(dashboardPollingInterval);
+        dashboardPollingInterval = null;
+    }
+    if (warroomAutoRefreshInterval) {
+        clearInterval(warroomAutoRefreshInterval);
+        warroomAutoRefreshInterval = null;
+    }
+    if (skirmishTimerInterval) {
+        clearInterval(skirmishTimerInterval);
+        skirmishTimerInterval = null;
+    }
+
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_email');
-    location.reload();
+
+    // Hard refresh with cache busting to prevent browser from serving stale pages
+    window.location.href = window.location.href.split('?')[0] + '?logout=' + Date.now();
 }
 
 // Authenticated fetch wrapper
