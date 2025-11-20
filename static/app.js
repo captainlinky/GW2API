@@ -229,6 +229,9 @@ function updateUserBadge() {
 }
 
 function handleLogout() {
+    // Clear all cached data before logout
+    window.GW2Data.clearCache();
+
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_email');
     location.reload();
@@ -276,6 +279,7 @@ window.GW2Data = {
     mapsMeta: {}, // key: mapId -> { map_rect, continent_rect }
     loadingMatch: null, // Promise to prevent concurrent loads
     userWorldId: null, // User's home world ID
+    matchDataCache: {}, // World-aware cache: worldId -> { data, timestamp, loading }
 
     async getUserWorld() {
         try {
@@ -302,47 +306,58 @@ window.GW2Data = {
 
     async getMatchData(worldId = 1020, forceRefresh = false) {
         const now = Date.now();
-        const cacheAge = this.matchDataTimestamp ? now - this.matchDataTimestamp : Infinity;
-        
-        // Return cached data if less than 30 seconds old
-        if (!forceRefresh && this.matchData && cacheAge < 30000) {
-            console.log('Using cached match data');
-            return this.matchData;
+
+        // Initialize cache entry for this world if not exists
+        if (!this.matchDataCache[worldId]) {
+            this.matchDataCache[worldId] = {
+                data: null,
+                timestamp: null,
+                loading: null
+            };
         }
-        
-        // If already loading, wait for that promise
-        if (this.loadingMatch) {
-            console.log('Waiting for existing match data load');
-            return this.loadingMatch;
+
+        const cache = this.matchDataCache[worldId];
+        const cacheAge = cache.timestamp ? now - cache.timestamp : Infinity;
+
+        // Return cached data if less than 30 seconds old and not forcing refresh
+        if (!forceRefresh && cache.data && cacheAge < 30000) {
+            console.log(`Using cached match data for world ${worldId}`);
+            return cache.data;
         }
-        
+
+        // If already loading this world, wait for that promise
+        if (cache.loading) {
+            console.log(`Waiting for existing match data load for world ${worldId}`);
+            return cache.loading;
+        }
+
         // Load fresh data with timeout
-        console.log('Loading fresh match data');
+        console.log(`Loading fresh match data for world ${worldId}`);
         const startTime = performance.now();
-        this.loadingMatch = Promise.race([
+        cache.loading = Promise.race([
             fetch(apiUrl(`/api/wvw/match/${worldId}`)).then(response => response.json()),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout after 15s')), 15000))
         ])
             .then(data => {
                 const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-                console.log(`[FRONTEND] Match data loaded in ${elapsed}s`);
+                console.log(`[FRONTEND] Match data for world ${worldId} loaded in ${elapsed}s`);
                 if (data.status === 'success') {
-                    this.matchData = data.data;
-                    this.matchDataTimestamp = now;
-                    return this.matchData;
+                    cache.data = data.data;
+                    cache.timestamp = now;
+                    return cache.data;
                 }
                 throw new Error(data.message || 'Failed to load match data');
             })
             .catch(error => {
                 const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
-                console.error(`[FRONTEND] Match data error after ${elapsed}s:`, error);
+                console.error(`[FRONTEND] Match data error for world ${worldId} after ${elapsed}s:`, error);
                 throw error;
             })
             .finally(() => {
-                this.loadingMatch = null;
+                cache.loading = null;
             });
-        
-        return this.loadingMatch;
+
+        return cache.loading;
     },
     
     async getObjectivesMetadata(forceRefresh = false) {
@@ -392,6 +407,17 @@ window.GW2Data = {
         const map = Array.isArray(arr) ? arr[0] : arr;
         this.mapsMeta[mapId] = { map_rect: map.map_rect, continent_rect: map.continent_rect };
         return this.mapsMeta[mapId];
+    },
+
+    clearCache() {
+        console.log('[Cache] Clearing all GW2Data cache');
+        this.matchData = null;
+        this.matchDataTimestamp = null;
+        this.objectivesMetadata = null;
+        this.mapsMeta = {};
+        this.loadingMatch = null;
+        this.userWorldId = null;
+        this.matchDataCache = {};
     }
 };
 
@@ -551,12 +577,17 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Only proceed with data loading if user has an API key
     if (hasApiKey) {
+        // CRITICAL: Load user's world FIRST before any dashboard operations
+        // This prevents race condition where dashboard uses fallback world ID (1020)
+        const userWorld = await window.GW2Data.getUserWorld();
+        console.log(`[Dashboard Init] User world loaded: ${userWorld}`);
+
         checkApiStatus();
 
         // Load polling configuration and start polling
         const config = await loadPollingConfig();
 
-        // Initialize dashboard stats and auto-load match data (this will cache it)
+        // Now initialize dashboard with correct world ID
         updateDashboardStats();
         updateTeamBars();
         updateActivityTimeline();
