@@ -111,6 +111,9 @@ async function handleLogin() {
             hideAuthModal();
             showMainContent();
             updateUserBadge();
+
+            // Check if user has API key and redirect to settings if not
+            await checkAndRedirectIfNoApiKey();
         } else {
             showError(errorDiv, data.message || 'Login failed');
         }
@@ -170,6 +173,9 @@ async function handleRegister() {
             hideAuthModal();
             showMainContent();
             updateUserBadge();
+
+            // Check API key (should always be present for new registrations, but check anyway)
+            await checkAndRedirectIfNoApiKey();
         } else {
             showError(errorDiv, data.message || 'Registration failed');
         }
@@ -504,24 +510,35 @@ async function loadPollingConfig() {
 // Initialize
 document.addEventListener('DOMContentLoaded', async function() {
     setupTabs();
-    checkApiStatus();
 
-    // Load polling configuration and start polling
-    const config = await loadPollingConfig();
+    // Check if user has API key and redirect to settings if not
+    const hasApiKey = await checkAndRedirectIfNoApiKey();
 
-    // Initialize dashboard stats and auto-load match data (this will cache it)
-    updateDashboardStats();
-    updateTeamBars();
-    updateActivityTimeline();
-    updateKDRTimeline();
-    updatePPTTimeline();
-    updateEnhancedWvWStats();
+    // Only proceed with data loading if user has an API key
+    if (hasApiKey) {
+        checkApiStatus();
 
-    // Start polling with configured interval
-    startDashboardPolling(config.dashboard_interval);
+        // Load polling configuration and start polling
+        const config = await loadPollingConfig();
 
-    // Update settings UI if on settings tab
-    updatePollingConfigUI(config);
+        // Initialize dashboard stats and auto-load match data (this will cache it)
+        updateDashboardStats();
+        updateTeamBars();
+        updateActivityTimeline();
+        updateKDRTimeline();
+        updatePPTTimeline();
+        updateEnhancedWvWStats();
+
+        // Start polling with configured interval
+        startDashboardPolling(config.dashboard_interval);
+
+        // Update settings UI if on settings tab
+        updatePollingConfigUI(config);
+    } else {
+        // User has no API key - load minimal config for settings tab only
+        const config = await loadPollingConfig();
+        updatePollingConfigUI(config);
+    }
 });
 
 // Enhanced Dashboard Functions
@@ -2321,6 +2338,36 @@ function switchTab(tabName) {
 }
 
 // API Status Check
+async function checkAndRedirectIfNoApiKey() {
+    try {
+        const response = await authenticatedFetch(apiUrl('/api/user/has-api-key'));
+        const data = await response.json();
+
+        if (data.status === 'success' && !data.has_api_key) {
+            // User has no API key - redirect to settings tab
+            showTab('settings');
+
+            // Show a prominent message
+            const statusDiv = document.getElementById('current-key-status');
+            if (statusDiv) {
+                statusDiv.innerHTML = `
+                    <div class="status-message status-warning" style="font-size: 1.1em; padding: 20px; margin-bottom: 20px;">
+                        ⚠️ <strong>API Key Required</strong><br>
+                        Please add your Guild Wars 2 API key below to view your account data and WvW statistics.
+                    </div>
+                `;
+            }
+
+            return false; // No API key
+        }
+
+        return true; // Has API key
+    } catch (error) {
+        console.error('Error checking API key:', error);
+        return true; // Don't block if check fails
+    }
+}
+
 async function checkApiStatus() {
     try {
         const response = await fetch(apiUrl('/api/status'));
@@ -2402,9 +2449,13 @@ async function saveApiKey() {
         const data = await response.json();
         
         if (data.status === 'success') {
-            showMessage('settings', `API key saved successfully! Account: ${data.account_name}`, 'success');
+            showMessage('settings', `API key saved successfully! Account: ${data.account_name}. Reloading...`, 'success');
             document.getElementById('new-api-key').value = '';
-            checkApiStatus();
+
+            // Reload the page after a short delay to show the success message
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
         } else {
             showMessage('settings', data.message, 'error');
         }
