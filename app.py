@@ -1263,26 +1263,36 @@ def get_account():
 def get_user_world():
     """Get user's home world (WvW world affiliation)."""
     try:
+        user_id = getattr(request, 'user_id', None)
+        logger.info(f"[User World] Request for user_id={user_id}")
+
         api_key = get_current_api_key()
+        logger.info(f"[User World] Got API key for user {user_id}")
+
         client = GW2API(api_key=api_key)
         account_wvw = client.get_account_wvw()
+        logger.info(f"[User World] Account WvW data: {account_wvw}")
+
+        world_id = account_wvw.get('world')
+        logger.info(f"[User World] Returning world_id={world_id} for user {user_id}")
 
         return jsonify({
             'status': 'success',
             'data': {
-                'world_id': account_wvw.get('world'),
+                'world_id': world_id,
                 'team_id': account_wvw.get('team'),
                 'skiff_id': account_wvw.get('skiff'),
                 'warclaw_id': account_wvw.get('warclaw')
             }
         })
     except ValueError as e:
+        logger.error(f"[User World] ValueError: {e}")
         return jsonify({
             'status': 'error',
             'message': str(e)
         }), 401
     except Exception as e:
-        logger.error(f"Error fetching user world: {e}", exc_info=True)
+        logger.error(f"[User World] Error fetching user world: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
