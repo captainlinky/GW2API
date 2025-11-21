@@ -312,13 +312,20 @@ window.GW2Data = {
 
     async getUserWorld() {
         try {
-            console.log('[getUserWorld] Fetching user world from /api/user/world...');
-            const response = await fetch(apiUrl('/api/user/world'), {
+            const token = localStorage.getItem('auth_token');
+            const url = apiUrl('/api/user/world');
+            console.log('[getUserWorld] Starting...', { token: !!token, url });
+            console.log('[getUserWorld] Fetching from:', url);
+            console.log('[getUserWorld] Headers:', { Authorization: `Bearer ${token ? token.substring(0, 10) + '...' : 'NO TOKEN'}` });
+
+            const response = await fetch(url, {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                    'Authorization': `Bearer ${token}`
                 }
             });
+            console.log('[getUserWorld] Response status:', response.status);
             const data = await response.json();
+            console.log('[getUserWorld] Response data:', data);
             console.log('[getUserWorld] Response:', data);
 
             if (data.status === 'success' && data.data && data.data.world_id) {
@@ -610,8 +617,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Only proceed with data loading if user has an API key
     if (hasApiKey) {
+        console.log('[Dashboard Init] Starting - about to load user world');
         // CRITICAL: Load user's world FIRST before any dashboard operations
         // This prevents race condition where dashboard uses fallback world ID (1020)
+        console.log('[Dashboard Init] Calling getUserWorld()...');
         const userWorld = await window.GW2Data.getUserWorld();
         console.log(`[Dashboard Init] User world loaded: ${userWorld}`);
 
