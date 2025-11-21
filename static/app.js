@@ -12,7 +12,14 @@ function apiUrl(path) {
 
 // Helper function to get user's world ID (falls back to 1020 if not set)
 function getUserWorldId() {
-    return window.GW2Data && window.GW2Data.userWorldId ? window.GW2Data.userWorldId : 1020;
+    const worldId = window.GW2Data && window.GW2Data.userWorldId ? window.GW2Data.userWorldId : 1020;
+    if (worldId === 1020 && (!window.GW2Data || !window.GW2Data.userWorldId)) {
+        console.warn('[World] Using fallback world 1020 - userWorldId not loaded yet!', {
+            hasGW2Data: !!window.GW2Data,
+            userWorldId: window.GW2Data?.userWorldId
+        });
+    }
+    return worldId;
 }
 
 // ============= AUTHENTICATION FUNCTIONS =============
@@ -305,23 +312,27 @@ window.GW2Data = {
 
     async getUserWorld() {
         try {
+            console.log('[getUserWorld] Fetching user world from /api/user/world...');
             const response = await fetch(apiUrl('/api/user/world'), {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
                 }
             });
             const data = await response.json();
+            console.log('[getUserWorld] Response:', data);
 
-            if (data.status === 'success' && data.data.world_id) {
+            if (data.status === 'success' && data.data && data.data.world_id) {
                 this.userWorldId = data.data.world_id;
-                console.log(`User world loaded: ${this.userWorldId}`);
+                console.log(`[getUserWorld] ✓ User world loaded: ${this.userWorldId}`);
                 return this.userWorldId;
             } else {
-                console.warn('Failed to load user world:', data.message);
+                console.warn('[getUserWorld] ✗ Failed to load user world. Data:', data);
+                this.userWorldId = null;
                 return null;
             }
         } catch (error) {
-            console.error('Error loading user world:', error);
+            console.error('[getUserWorld] ✗ Error loading user world:', error);
+            this.userWorldId = null;
             return null;
         }
     },

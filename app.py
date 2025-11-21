@@ -2371,13 +2371,15 @@ def get_wvw_match_for_world(world_id):
         }), 400
 
     try:
+        logger.info(f"[WvW Match] Request for world_id={world_id}, parsed_world_id={parsed_world_id}")
         logger.debug(f"Starting /api/wvw/match/{world_id}")
         client = GW2API()
-        
+
         # Fetch match
         match_start = time.time()
         try:
-            match = client.get_wvw_match_by_world(int(world_id))
+            logger.info(f"[WvW Match] Fetching match for world {parsed_world_id}")
+            match = client.get_wvw_match_by_world(int(parsed_world_id))
         except Exception as primary_err:
             # Fallback: fetch all matches and find the one containing this world id
             try:
@@ -2397,8 +2399,9 @@ def get_wvw_match_for_world(world_id):
                 # Re-raise the original error if fallback also fails
                 raise primary_err
         match_elapsed = time.time() - match_start
+        logger.info(f"[WvW Match] Got match_id={match.get('id')} for world {parsed_world_id}")
         print(f"[PERF] Match fetch: {match_elapsed:.2f}s")
-        
+
         # Get world names (cached)
         worlds_start = time.time()
         worlds = client.get_worlds()
